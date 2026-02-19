@@ -43,6 +43,8 @@ interface BattleState {
   myReveal: RevealData | null;
   opponentReveal: RevealData | null;
   turnLog: TurnRecord[];
+  /** Note IDs from the opponent that existed before battle started. */
+  staleNoteIds: string[];
 }
 
 interface ResultState {
@@ -77,7 +79,7 @@ export interface GameStore {
   setCurrentPicker: (picker: "me" | "opponent") => void;
 
   // Battle actions
-  initBattle: () => void;
+  initBattle: (staleNoteIds: string[]) => void;
   selectChampion: (id: number | null) => void;
   selectAbility: (index: number | null) => void;
   setBattlePhase: (phase: BattlePhase) => void;
@@ -128,6 +130,7 @@ const initialBattle: BattleState = {
   myReveal: null,
   opponentReveal: null,
   turnLog: [],
+  staleNoteIds: [],
 };
 
 const initialResult: ResultState = {
@@ -195,10 +198,11 @@ export const useGameStore = create<GameStore>((set) => ({
   setCurrentPicker: (picker) =>
     set((state) => ({ draft: { ...state.draft, currentPicker: picker } })),
 
-  initBattle: () =>
+  initBattle: (staleNoteIds) =>
     set((state) => ({
       battle: {
         ...initialBattle,
+        staleNoteIds,
         myChampions: state.draft.myTeam.map((id) => ({
           id,
           currentHp: getChampionHp(id),

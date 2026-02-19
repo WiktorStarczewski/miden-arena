@@ -167,7 +167,7 @@ export function useSessionWallet(): UseSessionWalletReturn {
     (async () => {
       try {
         const wallet = await client.newWallet(
-          AccountStorageMode.private(),
+          AccountStorageMode.public(),
           true,
           AuthScheme.AuthRpoFalcon512,
         );

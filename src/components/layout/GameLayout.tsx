@@ -15,7 +15,7 @@ export default function GameLayout({
   onBack,
 }: GameLayoutProps) {
   return (
-    <div className="min-h-screen bg-[#0a0a1a] text-[#e0e0e0] flex flex-col">
+    <div className="h-screen bg-[#0a0a1a] text-[#e0e0e0] flex flex-col overflow-hidden">
       {/* Top bar */}
       <header className="sticky top-0 z-50 px-3 pt-3">
         <GlassPanel compact className="flex items-center justify-between">

@@ -39,7 +39,11 @@ export default function LobbyScreen() {
                 </motion.div>
                 <h3 className="text-xl font-bold text-green-400">Match Found!</h3>
                 <AccountBadge address={opponentId} label="Opponent" />
-                <p className="text-sm text-gray-400">Entering draft phase...</p>
+                {error ? (
+                  <p className="text-sm text-red-400">{error}</p>
+                ) : (
+                  <p className="text-sm text-gray-400">Entering draft phase...</p>
+                )}
               </div>
             </GlassPanel>
           ) : mode === "choose" ? (

@@ -58,9 +58,9 @@ export default function BattleScreen() {
 
   return (
     <GameLayout title={`Round ${battle.round}`}>
-      <div className="relative flex h-full flex-col">
+      <div className="relative flex h-full flex-col overflow-hidden">
         {/* 3D Arena Scene - top portion */}
-        <div className="relative h-[40vh] w-full sm:h-[50vh] lg:h-[55vh]">
+        <div className="relative flex-shrink-0 h-[35vh] w-full sm:h-[40vh] lg:h-[45vh]">
           <ArenaScene
             myChampion={myActiveChampion}
             opponentChampion={opponentActiveChampion}
@@ -68,8 +68,8 @@ export default function BattleScreen() {
           />
         </div>
 
-        {/* Battle HUD overlay */}
-        <div className="flex-1 overflow-hidden">
+        {/* Battle HUD — scrollable */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-1 pt-3 pb-4">
           <BattleHUD onSubmitMove={submitMove} />
         </div>
       </div>

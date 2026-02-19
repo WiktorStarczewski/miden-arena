@@ -47,7 +47,7 @@ export default function DraftScreen() {
 
   return (
     <GameLayout title="Champion Draft">
-      <div className="flex h-[calc(100vh-4rem)] flex-col">
+      <div className="flex h-full flex-col">
         {/* 3D Champion Preview — larger viewport */}
         <div className="relative h-[50vh] w-full sm:h-[55vh]">
           <DraftStage

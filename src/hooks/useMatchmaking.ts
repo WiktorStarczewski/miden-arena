@@ -15,7 +15,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import { useSend, useNotes } from "@miden-sdk/react";
+import { useSend, useNotes, useSyncState } from "@miden-sdk/react";
 import { JOIN_SIGNAL, ACCEPT_SIGNAL, LEAVE_SIGNAL } from "../constants/protocol";
 import { MIDEN_FAUCET_ID } from "../constants/miden";
 import { useGameStore } from "../store/gameStore";
@@ -27,7 +27,7 @@ import { saveOpponentId, saveRole, clearGameState, getOpponentId } from "../util
 
 export interface UseMatchmakingReturn {
   /** Start hosting a match. The caller should display `sessionWalletId` for the opponent. */
-  host: () => void;
+  host: () => Promise<void>;
   /** Join a hosted match by sending JOIN_SIGNAL to the host's wallet ID. */
   join: (hostWalletId: string) => Promise<void>;
   /** Whether we are currently waiting for the other player. */
@@ -51,6 +51,7 @@ export function useMatchmaking(): UseMatchmakingReturn {
 
   const { send, stage } = useSend();
   const { noteSummaries } = useNotes({ status: "committed" });
+  const { sync } = useSyncState();
 
   const [isWaiting, setIsWaiting] = useState(false);
   const [opponentId, setOpponentId] = useState<string | null>(null);
@@ -69,20 +70,33 @@ export function useMatchmaking(): UseMatchmakingReturn {
   const handledAcceptNoteIds = useRef<Set<string>>(new Set());
   const matchCompletedRef = useRef(false);
 
+  // When host()/join() is called before the SDK has loaded notes,
+  // the snapshot is empty and stale notes would slip through.
+  // This flag tells the detection effect to capture the first batch
+  // of notes as stale and skip that cycle.
+  const needsJoinBaselineRef = useRef(false);
+  const needsAcceptBaselineRef = useRef(false);
+
   // -----------------------------------------------------------------------
   // host() - Wait for a JOIN signal
   // -----------------------------------------------------------------------
-  const host = useCallback(() => {
-    // If rehosting, notify the previous opponent and clear persisted state
+  const host = useCallback(async () => {
+    // If rehosting, notify the previous opponent and clear persisted state.
+    // MUST await this so the wallet state settles before we send ACCEPT later.
     const prevOpponent = getOpponentId();
     if (prevOpponent && sessionWalletId) {
-      send({
-        from: sessionWalletId,
-        to: prevOpponent,
-        assetId: MIDEN_FAUCET_ID,
-        amount: LEAVE_SIGNAL,
-        noteType: "public",
-      }).catch(() => { /* best-effort */ });
+      try {
+        await sync();
+        await send({
+          from: sessionWalletId,
+          to: prevOpponent,
+          assetId: MIDEN_FAUCET_ID,
+          amount: LEAVE_SIGNAL,
+          noteType: "public",
+        });
+      } catch {
+        // best-effort — old opponent may be gone
+      }
     }
     clearGameState();
 
@@ -93,11 +107,18 @@ export function useMatchmaking(): UseMatchmakingReturn {
 
     // Snapshot ALL current JOIN notes as stale so the detection effect
     // only reacts to genuinely new JOIN notes from a new joiner.
+    const currentNotes = noteSummariesRef.current;
     handledJoinNoteIds.current = new Set(
-      noteSummariesRef.current
+      currentNotes
         .filter((n) => n.assets.length > 0 && n.assets[0].amount === JOIN_SIGNAL)
         .map((n) => n.id),
     );
+
+    // If rehosting AND SDK hasn't loaded notes yet, flag the effect to
+    // capture the first batch as stale (they predate this host() call).
+    // On a fresh host (no previous opponent), there can't be stale JOIN
+    // notes, so skip the baseline to avoid capturing the genuine new JOIN.
+    needsJoinBaselineRef.current = currentNotes.length === 0 && !!prevOpponent;
 
     setLocalRole("host");
     setOpponentId(null);
@@ -120,14 +141,17 @@ export function useMatchmaking(): UseMatchmakingReturn {
       // Always treat a lobby join as a fresh game — clear any stale
       // persisted state so we never accidentally restore an old session.
       // ---------------------------------------------------------------
+      // Check for previous game BEFORE clearing (needed for baseline logic)
+      const hadPreviousGame = !!getOpponentId();
       clearGameState();
       resetGame();
       setScreen("lobby");
 
       // Snapshot ALL current ACCEPT notes from this host as stale so
       // we only react to the new ACCEPT that follows our JOIN.
+      const currentNotes = noteSummariesRef.current;
       handledAcceptNoteIds.current = new Set(
-        noteSummariesRef.current
+        currentNotes
           .filter(
             (n) =>
               n.sender === hostWalletId &&
@@ -137,12 +161,18 @@ export function useMatchmaking(): UseMatchmakingReturn {
           .map((n) => n.id),
       );
 
+      // If rejoining AND SDK hasn't loaded notes yet, flag the effect to
+      // capture the first batch as stale. On a fresh join (no previous
+      // game), there can't be stale ACCEPT notes.
+      needsAcceptBaselineRef.current = currentNotes.length === 0 && hadPreviousGame;
+
       setLocalRole("joiner");
       setIsWaiting(true);
       setError(null);
       matchCompletedRef.current = false;
 
       try {
+        await sync();
         await send({
           from: sessionWalletId,
           to: hostWalletId,
@@ -170,6 +200,20 @@ export function useMatchmaking(): UseMatchmakingReturn {
   useEffect(() => {
     if (role !== "host" || !isWaiting || matchCompletedRef.current) return;
 
+    // Deferred baseline: host() was called before SDK loaded notes.
+    // Capture the first batch as stale and skip this cycle.
+    // The genuinely new JOIN note will arrive in a LATER SDK poll.
+    if (needsJoinBaselineRef.current) {
+      if (noteSummaries.length === 0) return;
+      for (const n of noteSummaries) {
+        if (n.assets.length > 0 && n.assets[0].amount === JOIN_SIGNAL) {
+          handledJoinNoteIds.current.add(n.id);
+        }
+      }
+      needsJoinBaselineRef.current = false;
+      return;
+    }
+
     const joinNote = noteSummaries.find(
       (n) =>
         n.assets.length > 0 &&
@@ -189,6 +233,7 @@ export function useMatchmaking(): UseMatchmakingReturn {
       try {
         if (!sessionWalletId) throw new Error("Session wallet not ready.");
 
+        await sync();
         await send({
           from: sessionWalletId,
           to: joinerId,
@@ -224,6 +269,22 @@ export function useMatchmaking(): UseMatchmakingReturn {
   // -----------------------------------------------------------------------
   useEffect(() => {
     if (role !== "joiner" || !isWaiting || !opponentId || matchCompletedRef.current) {
+      return;
+    }
+
+    // Deferred baseline: join() was called before SDK loaded notes.
+    if (needsAcceptBaselineRef.current) {
+      if (noteSummaries.length === 0) return;
+      for (const n of noteSummaries) {
+        if (
+          n.sender === opponentId &&
+          n.assets.length > 0 &&
+          n.assets[0].amount === ACCEPT_SIGNAL
+        ) {
+          handledAcceptNoteIds.current.add(n.id);
+        }
+      }
+      needsAcceptBaselineRef.current = false;
       return;
     }
 

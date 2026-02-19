@@ -18,7 +18,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import { useSend } from "@miden-sdk/react";
+import { useSend, useSyncState } from "@miden-sdk/react";
 import { useGameStore } from "../store/gameStore";
 import { useNoteDecoder } from "./useNoteDecoder";
 import { MIDEN_FAUCET_ID } from "../constants/miden";
@@ -70,7 +70,8 @@ export function useDraft(): UseDraftReturn {
   const resetGame = useGameStore((s) => s.resetGame);
 
   const { send } = useSend();
-  const { draftPickNotes, leaveNotes } = useNoteDecoder(opponentId);
+  const { sync } = useSyncState();
+  const { draftPickNotes, leaveNotes, allOpponentNotes } = useNoteDecoder(opponentId);
 
   const staleNoteIds = useGameStore((s) => s.draft.staleNoteIds);
 
@@ -144,6 +145,8 @@ export function useDraft(): UseDraftReturn {
       setIsSending(true);
 
       try {
+        // Sync wallet state before building tx to avoid stale commitment
+        await sync();
         // Send pick to opponent
         const amount = encodeDraftPick(championId);
         await send({
@@ -228,10 +231,14 @@ export function useDraft(): UseDraftReturn {
     if (!done) return;
     if (myTeam.length !== TEAM_SIZE || opponentTeam.length !== TEAM_SIZE) return;
 
+    // Snapshot all current opponent note IDs so the battle phase can
+    // distinguish pre-battle notes from new combat notes.
+    const battleStaleNoteIds = allOpponentNotes.map((n) => n.noteId);
+
     clearGameState();
-    initBattle();
+    initBattle(battleStaleNoteIds);
     setScreen("battle");
-  }, [done, myTeam.length, opponentTeam.length, initBattle, setScreen]);
+  }, [done, myTeam.length, opponentTeam.length, allOpponentNotes, initBattle, setScreen]);
 
   return {
     pickChampion,

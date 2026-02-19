@@ -15,11 +15,11 @@ export const DRAFT_PICK_MAX = 10n;
 export const MOVE_MIN = 1n;
 export const MOVE_MAX = 20n;
 
-/** Max value for 48-bit hash chunk (used in commit) */
-export const COMMIT_CHUNK_MAX = (1n << 48n) - 1n;
+/** Max amount for commit notes: 16-bit hash + 1 + 100_000 offset = 165536. */
+export const COMMIT_CHUNK_MAX = (1n << 16n) + 100_000n;
 
-/** Max value for 32-bit nonce chunk (used in reveal) */
-export const NONCE_CHUNK_MAX = (1n << 32n) - 1n;
+/** Max amount for nonce reveal notes: 16-bit value + 21 offset = 65556. */
+export const NONCE_CHUNK_MAX = (1n << 16n) + 20n;
 
 /** Snake draft order: index = pick number (0-5), value = "A" or "B" */
 export const DRAFT_ORDER: ("A" | "B")[] = ["A", "B", "B", "A", "A", "B"];

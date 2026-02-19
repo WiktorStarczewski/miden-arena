@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useGameStore } from "../../store/gameStore";
 import { getChampion } from "../../constants/champions";
@@ -8,6 +8,7 @@ import ElementBadge from "../ui/ElementBadge";
 import StatusEffectIcon from "../ui/StatusEffectIcon";
 import AbilityCard from "../ui/AbilityCard";
 import TurnPhaseIndicator from "../ui/TurnPhaseIndicator";
+import ChampionSelector from "./ChampionSelector";
 import type { Champion, ChampionState, TurnAction } from "../../types/game";
 
 interface BattleHUDProps {
@@ -78,8 +79,7 @@ function FighterPanel({
 
 export default function BattleHUD({ onSubmitMove, children }: BattleHUDProps) {
   const battle = useGameStore((state) => state.battle);
-
-  if (!battle) return null;
+  const selectChampion = useGameStore((state) => state.selectChampion);
 
   const {
     phase,
@@ -88,6 +88,18 @@ export default function BattleHUD({ onSubmitMove, children }: BattleHUDProps) {
     myChampions,
     opponentChampions,
   } = battle;
+
+  // Auto-select the first surviving champion when entering the choosing phase
+  useEffect(() => {
+    if (phase !== "choosing") return;
+    // If no champion selected, or current selection is KO'd, pick the first alive
+    const currentValid = selectedChampion != null &&
+      myChampions.some((c) => c.id === selectedChampion && !c.isKO);
+    if (!currentValid) {
+      const survivor = myChampions.find((c) => !c.isKO);
+      if (survivor) selectChampion(survivor.id);
+    }
+  }, [phase, selectedChampion, myChampions, selectChampion]);
 
   // Find the active (selected or first surviving) champion for each side
   const myChampionState = selectedChampion != null
@@ -137,7 +149,7 @@ export default function BattleHUD({ onSubmitMove, children }: BattleHUDProps) {
           />
         )}
 
-        {/* Ability cards - bottom sheet style on mobile */}
+        {/* Champion selector + Ability cards - bottom sheet style on mobile */}
         {myChampion && (
           <AnimatePresence>
             {isChoosing && (
@@ -148,6 +160,20 @@ export default function BattleHUD({ onSubmitMove, children }: BattleHUDProps) {
                 transition={{ duration: 0.25, ease: "easeOut" }}
                 className="mt-2"
               >
+                {/* Champion selector — only show when multiple champions alive */}
+                {myChampions.filter((c) => !c.isKO).length > 1 && (
+                  <div className="mb-2">
+                    <ChampionSelector
+                      champions={myChampions}
+                      selectedId={selectedChampion}
+                      onSelect={(id) => {
+                        selectChampion(id);
+                        // Reset ability selection when switching champion
+                        useGameStore.getState().selectAbility(null);
+                      }}
+                    />
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-2 md:flex md:gap-3">
                   {myChampion.abilities.map((ability, i) => (
                     <AbilityCard

@@ -36,10 +36,9 @@ export default function ChampionSelector({
       <div
         ref={scrollRef}
         className="
-          flex gap-3 overflow-x-auto pb-2 px-1
+          flex gap-3 overflow-x-auto py-1 px-1
           snap-x snap-mandatory
           scrollbar-none
-          -mx-1
         "
         style={{
           scrollbarWidth: "none",
@@ -63,10 +62,10 @@ export default function ChampionSelector({
               whileTap={!isKO ? { scale: 0.95 } : undefined}
               className={`
                 flex-shrink-0 snap-center w-[140px]
-                touch-manipulation
+                touch-manipulation rounded-xl
+                border-2 transition-colors
                 ${isKO ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}
-                ${isSelected ? "ring-2 ring-amber-400 ring-offset-1 ring-offset-transparent" : ""}
-                rounded-xl transition-shadow
+                ${isSelected ? "border-amber-400" : "border-transparent"}
               `}
             >
               <GlassPanel
