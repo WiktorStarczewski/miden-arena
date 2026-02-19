@@ -29,7 +29,7 @@ import {
   isDraftComplete,
   isValidPick,
 } from "../engine/draft";
-import { saveDraftState, getDraftState, clearGameState } from "../utils/persistence";
+import { saveDraftState, clearGameState } from "../utils/persistence";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -72,18 +72,16 @@ export function useDraft(): UseDraftReturn {
   const { send } = useSend();
   const { draftPickNotes, leaveNotes } = useNoteDecoder(opponentId);
 
+  const staleNoteIds = useGameStore((s) => s.draft.staleNoteIds);
+
   const [error, setError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
+  const isSendingRef = useRef(false);
 
-  // Track how many opponent picks we have already processed.
-  // - Reconnect (persisted state exists): use persisted count so only NEW
-  //   notes from the opponent are processed.
-  // - Fresh game (no persisted state): -1 sentinel; first effect run
-  //   snapshots current note count so stale notes from prior games are skipped.
-  const persistedDraft = getDraftState();
-  const processedPickCount = useRef(
-    persistedDraft !== null ? persistedDraft.processedOpponentNotes : -1,
-  );
+  // Set of note IDs from the opponent that existed before this game started
+  // (snapshotted by useMatchmaking at match-complete time) plus IDs already
+  // processed in this session. Notes in this set are skipped by the detector.
+  const handledNoteIds = useRef(new Set(staleNoteIds));
   const initialLeaveCount = useRef(-1);
 
   // -----------------------------------------------------------------------
@@ -122,6 +120,10 @@ export function useDraft(): UseDraftReturn {
   // -----------------------------------------------------------------------
   const pickChampion = useCallback(
     async (championId: number) => {
+      // Synchronous ref guard — prevents concurrent sends even if React
+      // hasn't re-rendered yet (isSending state would be stale).
+      if (isSendingRef.current) return;
+
       if (!isMyTurn) {
         setError("It is not your turn to pick.");
         return;
@@ -138,6 +140,7 @@ export function useDraft(): UseDraftReturn {
       }
 
       setError(null);
+      isSendingRef.current = true;
       setIsSending(true);
 
       try {
@@ -151,6 +154,12 @@ export function useDraft(): UseDraftReturn {
           noteType: "public",
         });
 
+        console.log("[useDraft] pick sent successfully", {
+          championId,
+          to: opponentId,
+          amount: amount.toString(),
+        });
+
         // Record pick locally
         storePickChampion(championId, "me");
       } catch (err) {
@@ -158,6 +167,7 @@ export function useDraft(): UseDraftReturn {
           err instanceof Error ? err.message : "Failed to send draft pick.";
         setError(message);
       } finally {
+        isSendingRef.current = false;
         setIsSending(false);
       }
     },
@@ -168,31 +178,33 @@ export function useDraft(): UseDraftReturn {
   // Detect opponent draft picks
   // -----------------------------------------------------------------------
   useEffect(() => {
-    // On first run, snapshot the current note count so stale notes from
-    // previous games are not reprocessed.
-    if (processedPickCount.current === -1) {
-      processedPickCount.current = draftPickNotes.length;
-      return;
-    }
-
     if (done) return;
 
-    // Process any new draft pick notes we have not handled yet
-    const unprocessed = draftPickNotes.slice(processedPickCount.current);
-    if (unprocessed.length === 0) return;
+    // Find the first draft-pick note we haven't handled yet.
+    // Uses ID-based filtering so late-arriving stale notes are skipped.
+    const note = draftPickNotes.find(
+      (n) => !handledNoteIds.current.has(n.noteId),
+    );
+    if (!note) return;
 
-    for (const note of unprocessed) {
-      try {
-        const championId = decodeDraftPick(note.amount);
-        if (isValidPick(pool, championId)) {
-          storePickChampion(championId, "opponent");
-        }
-      } catch {
-        // Ignore malformed notes
+    // Mark handled immediately so we don't reprocess on the next render
+    handledNoteIds.current.add(note.noteId);
+
+    console.log("[useDraft] processing pick note", {
+      noteId: note.noteId,
+      amount: note.amount.toString(),
+    });
+
+    try {
+      const championId = decodeDraftPick(note.amount);
+      if (isValidPick(pool, championId)) {
+        storePickChampion(championId, "opponent");
+      } else {
+        console.warn("[useDraft] skipping invalid pick", { championId, pool });
       }
+    } catch (err) {
+      console.warn("[useDraft] failed to decode pick note", err);
     }
-
-    processedPickCount.current = draftPickNotes.length;
   }, [draftPickNotes, pool, done, storePickChampion]);
 
   // -----------------------------------------------------------------------
@@ -205,7 +217,7 @@ export function useDraft(): UseDraftReturn {
       myTeam,
       opponentTeam,
       pickNumber,
-      processedOpponentNotes: processedPickCount.current,
+      processedOpponentNotes: opponentTeam.length,
     });
   }, [pool, myTeam, opponentTeam, pickNumber]);
 

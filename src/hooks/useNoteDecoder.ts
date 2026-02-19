@@ -100,6 +100,7 @@ export function useNoteDecoder(opponentId: string | null): UseNoteDecoderReturn 
       opponentNotes.push({ noteId: note.id, sender: note.sender!, amount });
     }
 
+
     const joinNotes: DecodedNote[] = [];
     const acceptNotes: DecodedNote[] = [];
     const leaveNotes: DecodedNote[] = [];

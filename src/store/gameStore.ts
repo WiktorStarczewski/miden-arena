@@ -27,6 +27,8 @@ export interface DraftState {
   opponentTeam: number[];
   currentPicker: "me" | "opponent";
   pickNumber: number;
+  /** Note IDs from the opponent that existed before this game started. */
+  staleNoteIds: string[];
 }
 
 interface BattleState {
@@ -69,7 +71,7 @@ export interface GameStore {
   setOpponent: (id: string, role: "host" | "joiner") => void;
 
   // Draft actions
-  initDraft: () => void;
+  initDraft: (staleNoteIds: string[]) => void;
   restoreDraft: (draft: DraftState) => void;
   pickChampion: (championId: number, picker: "me" | "opponent") => void;
   setCurrentPicker: (picker: "me" | "opponent") => void;
@@ -111,6 +113,7 @@ const initialDraft: DraftState = {
   opponentTeam: [],
   currentPicker: "me",
   pickNumber: 0,
+  staleNoteIds: [],
 };
 
 const initialBattle: BattleState = {
@@ -155,7 +158,7 @@ export const useGameStore = create<GameStore>((set) => ({
   setOpponent: (id, role) =>
     set({ match: { opponentId: id, role } }),
 
-  initDraft: () =>
+  initDraft: (staleNoteIds) =>
     set({
       draft: {
         pool: Array.from({ length: 10 }, (_, i) => i),
@@ -163,6 +166,7 @@ export const useGameStore = create<GameStore>((set) => ({
         opponentTeam: [],
         currentPicker: "me",
         pickNumber: 0,
+        staleNoteIds,
       },
     }),
 

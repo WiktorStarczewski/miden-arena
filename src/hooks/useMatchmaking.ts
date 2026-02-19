@@ -16,11 +16,10 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useSend, useNotes } from "@miden-sdk/react";
-import { JOIN_SIGNAL, ACCEPT_SIGNAL, LEAVE_SIGNAL, TEAM_SIZE } from "../constants/protocol";
+import { JOIN_SIGNAL, ACCEPT_SIGNAL, LEAVE_SIGNAL } from "../constants/protocol";
 import { MIDEN_FAUCET_ID } from "../constants/miden";
 import { useGameStore } from "../store/gameStore";
-import { getCurrentPicker } from "../engine/draft";
-import { saveOpponentId, saveRole, clearGameState, getOpponentId, getRole, getDraftState } from "../utils/persistence";
+import { saveOpponentId, saveRole, clearGameState, getOpponentId } from "../utils/persistence";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -48,7 +47,6 @@ export function useMatchmaking(): UseMatchmakingReturn {
   const setOpponent = useGameStore((s) => s.setOpponent);
   const setScreen = useGameStore((s) => s.setScreen);
   const initDraft = useGameStore((s) => s.initDraft);
-  const restoreDraft = useGameStore((s) => s.restoreDraft);
   const resetGame = useGameStore((s) => s.resetGame);
 
   const { send, stage } = useSend();
@@ -119,46 +117,8 @@ export function useMatchmaking(): UseMatchmakingReturn {
       }
 
       // ---------------------------------------------------------------
-      // Reconnection: same host + we were the joiner → restore state
-      // ---------------------------------------------------------------
-      const persistedOpponent = getOpponentId();
-      const persistedRole = getRole();
-
-      if (persistedOpponent === hostWalletId && persistedRole === "joiner") {
-        const persistedDraft = getDraftState();
-
-        // Only reconnect if the draft is still in progress (not complete).
-        // A complete draft (pickNumber >= 6 or teams full) means the game
-        // already ended — treat as a new game instead.
-        const draftInProgress =
-          persistedDraft &&
-          persistedDraft.pickNumber < 6 &&
-          persistedDraft.myTeam.length < TEAM_SIZE;
-
-        if (draftInProgress) {
-          // Compute the correct picker for the restored pick number.
-          const picker = getCurrentPicker(persistedDraft.pickNumber, "joiner");
-          setOpponent(hostWalletId, "joiner");
-          restoreDraft({
-            pool: persistedDraft.pool,
-            myTeam: persistedDraft.myTeam,
-            opponentTeam: persistedDraft.opponentTeam,
-            pickNumber: persistedDraft.pickNumber,
-            currentPicker: picker,
-          });
-          setLocalRole("joiner");
-          setIsWaiting(false);
-          setError(null);
-          matchCompletedRef.current = true;
-          setOpponentId(hostWalletId);
-          setScreen("draft");
-          return;
-        }
-        // Draft was complete or no persisted state — fall through to new game
-      }
-
-      // ---------------------------------------------------------------
-      // New game: reset stale state, send JOIN, wait for ACCEPT
+      // Always treat a lobby join as a fresh game — clear any stale
+      // persisted state so we never accidentally restore an old session.
       // ---------------------------------------------------------------
       clearGameState();
       resetGame();
@@ -201,7 +161,7 @@ export function useMatchmaking(): UseMatchmakingReturn {
         setIsWaiting(false);
       }
     },
-    [sessionWalletId, send, resetGame, restoreDraft, initDraft, setOpponent, setScreen],
+    [sessionWalletId, send, resetGame, setScreen],
   );
 
   // -----------------------------------------------------------------------
@@ -237,12 +197,17 @@ export function useMatchmaking(): UseMatchmakingReturn {
           noteType: "public",
         });
 
-        // Matchmaking complete for host
+        // Snapshot ALL note IDs from the joiner so useDraft can distinguish
+        // stale notes (from previous games) from new ones by ID.
+        const staleNoteIds = noteSummaries
+          .filter((n) => n.sender === joinerId)
+          .map((n) => n.id);
+
         matchCompletedRef.current = true;
         setOpponent(joinerId, "host");
         saveOpponentId(joinerId);
         saveRole("host");
-        initDraft();
+        initDraft(staleNoteIds);
         setScreen("draft");
         setIsWaiting(false);
       } catch (err) {
@@ -272,11 +237,17 @@ export function useMatchmaking(): UseMatchmakingReturn {
 
     if (!acceptNote) return;
 
+    // Snapshot ALL note IDs from the host so useDraft can distinguish
+    // stale notes (from previous games) from new ones by ID.
+    const staleNoteIds = noteSummaries
+      .filter((n) => n.sender === opponentId)
+      .map((n) => n.id);
+
     matchCompletedRef.current = true;
     setOpponent(opponentId, "joiner");
     saveOpponentId(opponentId);
     saveRole("joiner");
-    initDraft();
+    initDraft(staleNoteIds);
     setScreen("draft");
     setIsWaiting(false);
   }, [role, isWaiting, opponentId, noteSummaries, setOpponent, setScreen, initDraft]);
