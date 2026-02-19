@@ -156,9 +156,12 @@ const LoadedModel = React.memo(function LoadedModel({
     }
   }, [animation, actions, mixer]);
 
-  // Mirror the model for the right side so champions face each other
+  // Rotate champions to face each other. Pure facing would be ±π/2
+  // (profile to camera), so we use ±π/3 (~60°) for a 3/4 view where
+  // they clearly face each other while remaining visible from the front.
+  // Mirror X on the right side for a flipped fighting stance.
   const scaleX = side === "right" ? -1 : 1;
-  const rotationY = side === "right" ? Math.PI : 0;
+  const rotationY = side === "left" ? Math.PI / 3 : -Math.PI / 3;
 
   return (
     <group
