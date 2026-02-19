@@ -4,12 +4,12 @@ import { useGLTF, useAnimations } from "@react-three/drei";
 import {
   Group,
   Mesh,
-  MeshToonMaterial,
   DataTexture,
   NearestFilter,
   Color,
   SkinnedMesh,
 } from "three";
+import { getChampion } from "../constants/champions";
 
 // TYPES
 // ================================================================================================
@@ -87,35 +87,44 @@ const LoadedModel = React.memo(function LoadedModel({
   elementColor,
 }: ChampionModelProps) {
   const groupRef = useRef<Group>(null);
-  const modelPath = `/models/champion_${championId}.glb`;
-  const { scene, animations } = useGLTF(modelPath);
-  const { actions, mixer } = useAnimations(animations, groupRef);
-  const gradientMap = useMemo(() => createGradientMap(), []);
+  const champion = getChampion(championId);
+  const modelPath = champion.modelPath;
 
-  // Apply toon material to all meshes in the model
+  // Derive animation file path: /models/ember.glb + "idle" → /models/ember.idle.glb
+  const animPath = modelPath.replace(".glb", `.${animation}.glb`);
+
+  const { scene, animations: modelAnims } = useGLTF(modelPath);
+  const { animations: externalAnims } = useGLTF(animPath);
+
+  // Merge clips: prefer external animation file, fall back to embedded clips
+  const allAnimations = useMemo(
+    () => [...externalAnims, ...modelAnims],
+    [externalAnims, modelAnims],
+  );
+
+  const { actions, mixer } = useAnimations(allAnimations, groupRef);
+
+  // Add a subtle element-colored emissive tint while preserving original materials
   useEffect(() => {
-    const toonColor = new Color(elementColor);
+    const tint = new Color(elementColor);
     scene.traverse((child) => {
       if (
         child instanceof Mesh ||
         child instanceof SkinnedMesh
       ) {
-        const original = child.material as { map?: unknown; color?: Color };
-        const toonMat = new MeshToonMaterial({
-          color: original.color ?? toonColor,
-          gradientMap,
-          emissive: toonColor,
-          emissiveIntensity: 0.08,
-        });
-        if (original.map) {
-          (toonMat as unknown as { map: unknown }).map = original.map;
+        const mat = child.material as {
+          emissive?: Color;
+          emissiveIntensity?: number;
+        };
+        if (mat && "emissive" in mat) {
+          mat.emissive = tint;
+          mat.emissiveIntensity = 0.08;
         }
-        child.material = toonMat;
         child.castShadow = true;
         child.receiveShadow = true;
       }
     });
-  }, [scene, elementColor, gradientMap]);
+  }, [scene, elementColor]);
 
   // Play the requested animation
   useEffect(() => {
@@ -183,7 +192,7 @@ const ChampionModel = React.memo(function ChampionModel(
         />
       }
     >
-      <LoadedModel {...props} />
+      <LoadedModel key={props.championId} {...props} />
     </React.Suspense>
   );
 });

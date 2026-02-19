@@ -5,46 +5,23 @@ import ChampionCard from "../ui/ChampionCard";
 
 interface DraftPoolProps {
   pool: number[];
-  onPick: (id: number) => void;
+  selectedId?: number | null;
+  onSelect: (id: number) => void;
   disabled?: boolean;
 }
 
 export default function DraftPool({
   pool,
-  onPick,
+  selectedId,
+  onSelect,
   disabled = false,
 }: DraftPoolProps) {
   return (
     <div className="w-full">
-      <div className="text-[10px] uppercase tracking-wider text-white/40 font-medium mb-3 px-1">
-        Available Champions
-      </div>
-
-      {/* 2x5 responsive grid */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-5 md:gap-4">
+      {/* Compact single-column list */}
+      <div className="grid grid-cols-1 gap-2">
         {pool.map((championId, index) => {
           const champion = getChampion(championId);
-          if (!champion) {
-            // Champion already picked -- show grayed-out placeholder
-            return (
-              <motion.div
-                key={`empty-${index}`}
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: index * 0.04 }}
-                className="
-                  min-h-[120px] rounded-xl
-                  border-2 border-dashed border-white/10
-                  bg-white/[0.02]
-                  flex items-center justify-center
-                "
-              >
-                <span className="text-xs text-white/20 uppercase tracking-wider">
-                  Picked
-                </span>
-              </motion.div>
-            );
-          }
 
           return (
             <motion.div
@@ -59,8 +36,10 @@ export default function DraftPool({
             >
               <ChampionCard
                 champion={champion}
+                compact
+                selected={championId === selectedId}
                 disabled={disabled}
-                onClick={() => onPick(championId)}
+                onClick={() => onSelect(championId)}
               />
             </motion.div>
           );

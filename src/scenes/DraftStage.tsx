@@ -59,7 +59,7 @@ const Pedestal = React.memo(function Pedestal({
   const glowColor = useMemo(() => new Color(elementColor), [elementColor]);
 
   return (
-    <group position={[0, -0.05, 0]}>
+    <group position={[0, -0.05, 0]} scale={[0.5, 0.5, 0.5]}>
       {/* Main pedestal cylinder */}
       <mesh position={[0, -0.25, 0]} receiveShadow>
         <cylinderGeometry args={[1.0, 1.2, 0.5, 32]} />
@@ -232,38 +232,41 @@ const DraftSceneContent = React.memo(function DraftSceneContent({
       {/* Lighting */}
       <DraftLighting elementColor={elementColor} />
 
-      {/* Pedestal */}
-      <Pedestal elementColor={elementColor} />
+      {/* Scene group — shifted down so pedestal sits near bottom of viewport */}
+      <group position={[0, -0.9, 0]}>
+        {/* Pedestal */}
+        <Pedestal elementColor={elementColor} />
 
-      {/* Champion or empty state */}
-      {championId !== null ? (
-        <>
-          <RotatingChampion
-            championId={championId}
-            elementColor={elementColor}
-            shouldRotate={onRotate ?? true}
-          />
-          {element && (
-            <ElementalAura
-              element={element}
-              position={[0, 0.2, 0]}
-              intensity={0.8}
+        {/* Champion or empty state */}
+        {championId !== null ? (
+          <>
+            <RotatingChampion
+              championId={championId}
+              elementColor={elementColor}
+              shouldRotate={onRotate ?? true}
             />
-          )}
-        </>
-      ) : (
-        <EmptyPedestal />
-      )}
+            {element && (
+              <ElementalAura
+                element={element}
+                position={[0, 0.2, 0]}
+                intensity={0.8}
+              />
+            )}
+          </>
+        ) : (
+          <EmptyPedestal />
+        )}
 
-      {/* Contact shadows */}
-      <ContactShadows
-        position={[0, 0, 0]}
-        opacity={0.5}
-        scale={5}
-        blur={2}
-        far={3}
-        color="#000020"
-      />
+        {/* Contact shadows */}
+        <ContactShadows
+          position={[0, 0, 0]}
+          opacity={0.5}
+          scale={5}
+          blur={2}
+          far={3}
+          color="#000020"
+        />
+      </group>
 
       {/* Post-processing - softer for draft */}
       <PostProcessing
