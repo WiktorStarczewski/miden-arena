@@ -21,7 +21,7 @@ interface MatchState {
   role: "host" | "joiner" | null;
 }
 
-interface DraftState {
+export interface DraftState {
   pool: number[];
   myTeam: number[];
   opponentTeam: number[];
@@ -70,6 +70,7 @@ export interface GameStore {
 
   // Draft actions
   initDraft: () => void;
+  restoreDraft: (draft: DraftState) => void;
   pickChampion: (championId: number, picker: "me" | "opponent") => void;
   setCurrentPicker: (picker: "me" | "opponent") => void;
 
@@ -164,6 +165,8 @@ export const useGameStore = create<GameStore>((set) => ({
         pickNumber: 0,
       },
     }),
+
+  restoreDraft: (draft) => set({ draft }),
 
   pickChampion: (championId, picker) =>
     set((state) => {

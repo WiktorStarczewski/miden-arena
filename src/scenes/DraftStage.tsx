@@ -5,7 +5,7 @@ import {
   AdaptiveDpr,
   PerformanceMonitor,
 } from "@react-three/drei";
-import { Group, Color, DataTexture, NearestFilter, Mesh } from "three";
+import { Group, Color, DataTexture, NearestFilter, RedFormat, Mesh } from "three";
 
 import ChampionModel from "./ChampionModel";
 import ElementalAura from "./ElementalAura";
@@ -39,7 +39,7 @@ const CAMERA_POSITION: [number, number, number] = [0, 2.5, 4.5];
 
 function createGradientMap(): DataTexture {
   const colors = new Uint8Array([50, 100, 160, 220]);
-  const texture = new DataTexture(colors, 4, 1);
+  const texture = new DataTexture(colors, 4, 1, RedFormat);
   texture.magFilter = NearestFilter;
   texture.minFilter = NearestFilter;
   texture.needsUpdate = true;

@@ -4,6 +4,7 @@ import { Environment, ContactShadows, Sparkles } from "@react-three/drei";
 import {
   DataTexture,
   NearestFilter,
+  RedFormat,
   Color,
   BufferGeometry,
   Float32BufferAttribute,
@@ -32,7 +33,7 @@ interface ArenaEnvironmentProps {
 
 function createGroundGradientMap(): DataTexture {
   const colors = new Uint8Array([40, 80, 120, 180]);
-  const texture = new DataTexture(colors, 4, 1);
+  const texture = new DataTexture(colors, 4, 1, RedFormat);
   texture.magFilter = NearestFilter;
   texture.minFilter = NearestFilter;
   texture.needsUpdate = true;

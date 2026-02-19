@@ -29,6 +29,7 @@ import {
   isDraftComplete,
   isValidPick,
 } from "../engine/draft";
+import { saveDraftState, getDraftState, clearGameState } from "../utils/persistence";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -75,9 +76,14 @@ export function useDraft(): UseDraftReturn {
   const [isSending, setIsSending] = useState(false);
 
   // Track how many opponent picks we have already processed.
-  // Initialise to -1 as a sentinel; the first effect run snapshots the
-  // current note count so that stale notes from prior games are skipped.
-  const processedPickCount = useRef(-1);
+  // - Reconnect (persisted state exists): use persisted count so only NEW
+  //   notes from the opponent are processed.
+  // - Fresh game (no persisted state): -1 sentinel; first effect run
+  //   snapshots current note count so stale notes from prior games are skipped.
+  const persistedDraft = getDraftState();
+  const processedPickCount = useRef(
+    persistedDraft !== null ? persistedDraft.processedOpponentNotes : -1,
+  );
   const initialLeaveCount = useRef(-1);
 
   // -----------------------------------------------------------------------
@@ -89,6 +95,7 @@ export function useDraft(): UseDraftReturn {
       return;
     }
     if (leaveNotes.length > initialLeaveCount.current) {
+      clearGameState();
       resetGame();
       setScreen("lobby");
     }
@@ -189,12 +196,27 @@ export function useDraft(): UseDraftReturn {
   }, [draftPickNotes, pool, done, storePickChampion]);
 
   // -----------------------------------------------------------------------
+  // Persist draft state to localStorage on every change
+  // -----------------------------------------------------------------------
+  useEffect(() => {
+    if (pool.length === 0) return; // not initialised yet
+    saveDraftState({
+      pool,
+      myTeam,
+      opponentTeam,
+      pickNumber,
+      processedOpponentNotes: processedPickCount.current,
+    });
+  }, [pool, myTeam, opponentTeam, pickNumber]);
+
+  // -----------------------------------------------------------------------
   // Transition to battle when draft is complete
   // -----------------------------------------------------------------------
   useEffect(() => {
     if (!done) return;
     if (myTeam.length !== TEAM_SIZE || opponentTeam.length !== TEAM_SIZE) return;
 
+    clearGameState();
     initBattle();
     setScreen("battle");
   }, [done, myTeam.length, opponentTeam.length, initBattle, setScreen]);

@@ -6,6 +6,7 @@ import {
   Mesh,
   DataTexture,
   NearestFilter,
+  RedFormat,
   Color,
   SkinnedMesh,
 } from "three";
@@ -30,7 +31,7 @@ function createGradientMap(steps: number = 4): DataTexture {
   for (let i = 0; i < steps; i++) {
     colors[i] = Math.round((i / (steps - 1)) * 255);
   }
-  const texture = new DataTexture(colors, steps, 1);
+  const texture = new DataTexture(colors, steps, 1, RedFormat);
   texture.magFilter = NearestFilter;
   texture.minFilter = NearestFilter;
   texture.needsUpdate = true;

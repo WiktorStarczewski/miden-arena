@@ -13,11 +13,10 @@ export default function LobbyScreen() {
   const [joinInput, setJoinInput] = useState("");
   const [mode, setMode] = useState<"choose" | "host" | "join">("choose");
 
-  // Once matched, move to draft
-  if (opponentId) {
-    // Small delay to show matched state
-    setTimeout(() => setScreen("draft"), 1500);
-  }
+  // The matchmaking hooks (useMatchmaking) handle the screen transition
+  // to "draft" once both sides have exchanged signals and initDraft() has
+  // been called. The lobby just shows the "Match Found!" UI when
+  // opponentId is set.
 
   return (
     <GameLayout title="Lobby" showBackButton onBack={() => setScreen("setup")}>
