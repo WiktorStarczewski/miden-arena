@@ -3,7 +3,6 @@ import {
   createCommitment,
   createReveal,
   verifyReveal,
-  COMMIT_AMOUNT_OFFSET,
 } from "../commitment";
 
 describe("commitment", () => {
@@ -36,18 +35,14 @@ describe("commitment", () => {
     await expect(createCommitment(-1)).rejects.toThrow();
   });
 
-  it("commit amounts with offset fit within wallet balance", async () => {
-    // Wallet has ~15M tokens. Commit amounts must be well below that.
+  it("commit hash parts are raw 16-bit values (no offset)", async () => {
     for (let move = 1; move <= 20; move++) {
       const commit = await createCommitment(move);
-      const sent1 = commit.part1 + COMMIT_AMOUNT_OFFSET;
-      const sent2 = commit.part2 + COMMIT_AMOUNT_OFFSET;
-
-      // Max: 65536 + 100000 = 165536
-      expect(sent1).toBeLessThanOrEqual(165536n);
-      expect(sent2).toBeLessThanOrEqual(165536n);
-      expect(sent1).toBeGreaterThan(COMMIT_AMOUNT_OFFSET);
-      expect(sent2).toBeGreaterThan(COMMIT_AMOUNT_OFFSET);
+      // Raw values: [1, 65536]
+      expect(commit.part1).toBeGreaterThanOrEqual(1n);
+      expect(commit.part1).toBeLessThanOrEqual(65536n);
+      expect(commit.part2).toBeGreaterThanOrEqual(1n);
+      expect(commit.part2).toBeLessThanOrEqual(65536n);
     }
   });
 });
@@ -58,32 +53,52 @@ describe("reveal", () => {
     const reveal = createReveal(commit.move, commit.nonce);
 
     expect(reveal.move).toBe(5);
-    // Nonce parts: 16-bit value + 21 offset → [21, 65556]
-    expect(reveal.noncePart1).toBeGreaterThanOrEqual(21n);
-    expect(reveal.noncePart1).toBeLessThanOrEqual(65556n);
-    expect(reveal.noncePart2).toBeGreaterThanOrEqual(21n);
-    expect(reveal.noncePart2).toBeLessThanOrEqual(65556n);
+    // Raw nonce parts: 16-bit values [0, 65535]
+    expect(reveal.noncePart1).toBeGreaterThanOrEqual(0n);
+    expect(reveal.noncePart1).toBeLessThanOrEqual(65535n);
+    expect(reveal.noncePart2).toBeGreaterThanOrEqual(0n);
+    expect(reveal.noncePart2).toBeLessThanOrEqual(65535n);
   });
 
-  it("move and nonce ranges do not overlap", async () => {
+  it("nonce parts are raw 16-bit values (no offset)", async () => {
     const commit = await createCommitment(10);
     const reveal = createReveal(commit.move, commit.nonce);
 
-    // Move: [1, 20], Nonce: [21, 65556] — no overlap
-    expect(BigInt(reveal.move)).toBeLessThanOrEqual(20n);
-    expect(reveal.noncePart1).toBeGreaterThanOrEqual(21n);
-    expect(reveal.noncePart2).toBeGreaterThanOrEqual(21n);
+    // Raw values, no +21 offset
+    expect(reveal.noncePart1).toBeLessThanOrEqual(65535n);
+    expect(reveal.noncePart2).toBeLessThanOrEqual(65535n);
   });
 
-  it("reveal amounts do not overlap with commit amounts", async () => {
-    const commit = await createCommitment(10);
-    const reveal = createReveal(commit.move, commit.nonce);
+  it("handles zero nonce bytes correctly", () => {
+    // Nonce with zero bytes — raw output should be 0n for the zero parts
+    const zeroNonce = new Uint8Array([0, 0, 0, 0]);
+    const reveal = createReveal(1, zeroNonce);
 
-    // Commit with offset: [100001, 165536]
-    // Reveal move: [1, 20], Reveal nonce: [21, 65556]
-    // Max reveal amount (65556) < COMMIT_AMOUNT_OFFSET (100000)
-    expect(reveal.noncePart1).toBeLessThan(COMMIT_AMOUNT_OFFSET);
-    expect(reveal.noncePart2).toBeLessThan(COMMIT_AMOUNT_OFFSET);
+    expect(reveal.move).toBe(1);
+    expect(reveal.noncePart1).toBe(0n);
+    expect(reveal.noncePart2).toBe(0n);
+  });
+
+  it("produces deterministic output for known nonce", () => {
+    // Nonce [0x01, 0x02, 0x03, 0x04]
+    // part1 = bytesToBigInt([0x01, 0x02]) = 0x0102 = 258
+    // part2 = bytesToBigInt([0x03, 0x04]) = 0x0304 = 772
+    const nonce = new Uint8Array([0x01, 0x02, 0x03, 0x04]);
+    const reveal = createReveal(7, nonce);
+
+    expect(reveal.move).toBe(7);
+    expect(reveal.noncePart1).toBe(258n);
+    expect(reveal.noncePart2).toBe(772n);
+  });
+
+  it("handles max 16-bit nonce bytes", () => {
+    // Nonce [0xFF, 0xFF, 0xFF, 0xFF]
+    // part1 = 65535, part2 = 65535
+    const maxNonce = new Uint8Array([0xFF, 0xFF, 0xFF, 0xFF]);
+    const reveal = createReveal(1, maxNonce);
+
+    expect(reveal.noncePart1).toBe(65535n);
+    expect(reveal.noncePart2).toBe(65535n);
   });
 });
 
@@ -226,6 +241,92 @@ describe("verifyReveal", () => {
       const key = `${c.part1}-${c.part2}`;
       expect(seen.has(key)).toBe(false);
       seen.add(key);
+    }
+  });
+
+  it("handles zero nonce parts in verification", async () => {
+    // Construct a known nonce that produces 0 for part1
+    const zeroNonce = new Uint8Array([0, 0, 0xAB, 0xCD]);
+    const move = 5;
+
+    // Create commitment manually to control the nonce
+    const data = new Uint8Array([move, ...zeroNonce]);
+    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+    const hash = new Uint8Array(hashBuffer);
+
+    const { bytesToBigInt } = await import("../../utils/bytes");
+    const commitPart1 = bytesToBigInt(hash.slice(0, 2)) + 1n;
+    const commitPart2 = bytesToBigInt(hash.slice(2, 4)) + 1n;
+
+    // Reveal with zero nonce — part1 will be 0n (raw)
+    const reveal = createReveal(move, zeroNonce);
+    expect(reveal.noncePart1).toBe(0n); // first 2 bytes are zero
+
+    const valid = await verifyReveal(
+      reveal.move,
+      reveal.noncePart1,
+      reveal.noncePart2,
+      commitPart1,
+      commitPart2,
+    );
+
+    expect(valid).toBe(true);
+  });
+
+  it("attachment-format roundtrip: data survives felt array encoding", async () => {
+    // Simulate the exact FeltArray layout used in useCommitReveal
+    const MSG_TYPE_COMMIT = 1n;
+    const MSG_TYPE_REVEAL = 2n;
+
+    const commit = await createCommitment(13);
+    const reveal = createReveal(commit.move, commit.nonce);
+
+    // Commit attachment: [MSG_TYPE_COMMIT, part1, part2]
+    const commitAttachment = [MSG_TYPE_COMMIT, commit.part1, commit.part2];
+    expect(commitAttachment).toHaveLength(3);
+    expect(commitAttachment[0]).toBe(MSG_TYPE_COMMIT);
+    expect(commitAttachment[1]).toBe(commit.part1);
+    expect(commitAttachment[2]).toBe(commit.part2);
+
+    // Reveal attachment: [MSG_TYPE_REVEAL, move, noncePart1, noncePart2]
+    const revealAttachment = [
+      MSG_TYPE_REVEAL,
+      BigInt(reveal.move),
+      reveal.noncePart1,
+      reveal.noncePart2,
+    ];
+    expect(revealAttachment).toHaveLength(4);
+    expect(revealAttachment[0]).toBe(MSG_TYPE_REVEAL);
+    expect(Number(revealAttachment[1])).toBe(13);
+
+    // Verify using values extracted from attachment format
+    const valid = await verifyReveal(
+      Number(revealAttachment[1]),
+      revealAttachment[2],
+      revealAttachment[3],
+      commitAttachment[1],
+      commitAttachment[2],
+    );
+    expect(valid).toBe(true);
+  });
+
+  it("all values fit within Miden Felt range (< 2^63)", async () => {
+    // Miden Felt is a 64-bit prime field element, values must be < 2^63
+    const FELT_MAX = (1n << 63n) - 1n;
+
+    for (let i = 0; i < 100; i++) {
+      const move = (i % 20) + 1;
+      const commit = await createCommitment(move);
+      const reveal = createReveal(commit.move, commit.nonce);
+
+      // All values in commit attachment must fit in a Felt
+      expect(commit.part1).toBeLessThan(FELT_MAX);
+      expect(commit.part2).toBeLessThan(FELT_MAX);
+
+      // All values in reveal attachment must fit in a Felt
+      expect(BigInt(reveal.move)).toBeLessThan(FELT_MAX);
+      expect(reveal.noncePart1).toBeLessThan(FELT_MAX);
+      expect(reveal.noncePart2).toBeLessThan(FELT_MAX);
     }
   });
 });

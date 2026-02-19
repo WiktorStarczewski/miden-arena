@@ -13,6 +13,8 @@ export default defineConfig({
         "node_modules/@miden-sdk/miden-sdk"
       ),
     },
+    dedupe: ["@miden-sdk/miden-sdk"],
+    preserveSymlinks: true,
   },
   server: {
     fs: {
