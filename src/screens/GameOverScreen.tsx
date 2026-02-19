@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { useGameStore } from "../store/gameStore";
 import { useStaking } from "../hooks/useStaking";
 import { getChampion } from "../constants/champions";
+import { stopMusic, playSfx } from "../audio/audioManager";
 import { ELEMENT_COLORS } from "../constants/elements";
 import GlassPanel from "../components/layout/GlassPanel";
 import GameLayout from "../components/layout/GameLayout";
@@ -15,6 +16,12 @@ export default function GameOverScreen() {
 
   const isWinner = result.winner === "me";
   const mvpChampion = result.mvp !== null ? getChampion(result.mvp) : null;
+
+  // Fade out battle music and play result SFX
+  useEffect(() => {
+    stopMusic(2.0);
+    playSfx(isWinner ? "victory" : "defeat");
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-withdraw on game end
   useEffect(() => {

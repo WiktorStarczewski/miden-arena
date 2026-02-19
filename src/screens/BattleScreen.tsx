@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useGameStore } from "../store/gameStore";
 import { useCombatTurn } from "../hooks/useCombatTurn";
 import { getChampion } from "../constants/champions";
+import { playMusic } from "../audio/audioManager";
 import ArenaScene from "../scenes/ArenaScene";
 import BattleHUD from "../components/battle/BattleHUD";
 import GameLayout from "../components/layout/GameLayout";
@@ -201,6 +202,11 @@ function buildAnimScript(
 export default function BattleScreen() {
   const battle = useGameStore((s) => s.battle);
   const { submitMove, phase } = useCombatTurn();
+
+  // Crossfade to battle music on mount
+  useEffect(() => {
+    playMusic("battle");
+  }, []);
 
   const [animSubPhase, setAnimSubPhase] = useState<AnimSubPhase | null>(null);
   const [indicators, setIndicators] = useState<IndicatorData[]>([]);

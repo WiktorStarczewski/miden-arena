@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useGameStore } from "../store/gameStore";
 import { useDraft } from "../hooks/useDraft";
 import { getChampion } from "../constants/champions";
+import { playMusic, playSfx, playVoice } from "../audio/audioManager";
 import GameLayout from "../components/layout/GameLayout";
 import DraftPool from "../components/draft/DraftPool";
 import DraftTimeline from "../components/draft/DraftTimeline";
@@ -38,6 +39,11 @@ export default function DraftScreen() {
   }, [draft.pool, previewId]);
 
   const previewChampion = previewId !== null ? getChampion(previewId) : null;
+
+  // Crossfade to draft music on mount
+  useEffect(() => {
+    playMusic("draft");
+  }, []);
 
   // Transition to battle when draft complete
   if (isDone) {
@@ -112,7 +118,12 @@ export default function DraftScreen() {
               {isMyTurn && !isDone && (
                 <button
                   disabled={pickDisabled}
-                  onClick={() => previewId !== null && pickChampion(previewId)}
+                  onClick={() => {
+                    if (previewId !== null) {
+                      playSfx("pick");
+                      pickChampion(previewId);
+                    }
+                  }}
                   className="font-display w-full rounded-xl px-4 py-2.5 text-sm font-bold text-white
                     transition-all duration-200 active:scale-[0.97]
                     disabled:opacity-40 disabled:cursor-not-allowed"
@@ -156,7 +167,11 @@ export default function DraftScreen() {
               <DraftPool
                 pool={draft.pool}
                 selectedId={previewId}
-                onSelect={(id) => setPreviewId(id)}
+                onSelect={(id) => {
+                  setPreviewId(id);
+                  playSfx("select");
+                  if (isMyTurn) playVoice(id);
+                }}
                 disabled={!isMyTurn || isDone}
               />
             </div>

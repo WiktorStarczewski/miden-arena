@@ -30,6 +30,7 @@ import {
   isValidPick,
 } from "../engine/draft";
 import { saveDraftState, clearGameState } from "../utils/persistence";
+import { playSfx } from "../audio/audioManager";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -202,6 +203,7 @@ export function useDraft(): UseDraftReturn {
       const championId = decodeDraftPick(note.amount);
       if (isValidPick(pool, championId)) {
         storePickChampion(championId, "opponent");
+        playSfx("pick");
       } else {
         console.warn("[useDraft] skipping invalid pick", { championId, pool });
       }

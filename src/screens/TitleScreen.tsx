@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { useGameStore } from "../store/gameStore";
+import { initAudio, playMusic } from "../audio/audioManager";
 
 export default function TitleScreen() {
   const setScreen = useGameStore((s) => s.setScreen);
@@ -28,7 +29,10 @@ export default function TitleScreen() {
 
         {/* Play button */}
         <motion.button
-          onClick={() => setScreen("setup")}
+          onClick={() => {
+            initAudio().then(() => playMusic("menu"));
+            setScreen("setup");
+          }}
           className="rounded-3xl bg-gradient-to-r from-amber-500 to-orange-600 text-5xl font-black tracking-widest text-white shadow-2xl shadow-amber-500/40 transition-all hover:shadow-amber-500/60 active:scale-95"
           style={{ marginTop: "3rem", marginBottom: "3rem", padding: "3rem 5rem" }}
           whileHover={{ scale: 1.05 }}

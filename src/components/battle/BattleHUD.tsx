@@ -2,6 +2,7 @@ import { type ReactNode, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useGameStore } from "../../store/gameStore";
 import { getChampion } from "../../constants/champions";
+import { playSfx } from "../../audio/audioManager";
 import GlassPanel from "../layout/GlassPanel";
 import HealthBar from "../ui/HealthBar";
 import ElementBadge from "../ui/ElementBadge";
@@ -205,6 +206,7 @@ export default function BattleHUD({ onSubmitMove, children }: BattleHUDProps) {
                     "
                     onClick={() => {
                       if (onSubmitMove && selectedChampion != null && selectedAbility != null) {
+                        playSfx("confirm");
                         onSubmitMove({ championId: selectedChampion, abilityIndex: selectedAbility });
                       }
                     }}

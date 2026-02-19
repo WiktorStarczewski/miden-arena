@@ -27,6 +27,7 @@ import AmbientParticles from "./AmbientParticles";
 import ChampionModel from "./ChampionModel";
 import ElementalAura from "./ElementalAura";
 import AttackEffect from "./AttackEffect";
+import { playSfx } from "../audio/audioManager";
 import {
   registerCameraShake,
   unregisterCameraShake,
@@ -835,10 +836,11 @@ const ArenaScene = React.memo(function ArenaScene({
   const [hitFlash, setHitFlash] = useState(false);
   const [performanceScale, setPerformanceScale] = useState(1.0);
 
-  // Trigger hit flash when attack completes, plus camera shake
+  // Trigger hit flash when attack completes, plus camera shake + SFX
   const handleAttackComplete = useCallback(() => {
     setHitFlash(true);
     setTimeout(() => setHitFlash(false), 200);
+    playSfx("attack");
     onAttackComplete?.();
   }, [onAttackComplete]);
 

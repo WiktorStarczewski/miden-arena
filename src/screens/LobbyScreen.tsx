@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useGameStore } from "../store/gameStore";
 import { useMatchmaking } from "../hooks/useMatchmaking";
+import { playMusic } from "../audio/audioManager";
 import GlassPanel from "../components/layout/GlassPanel";
 import AccountBadge from "../components/ui/AccountBadge";
 import GameLayout from "../components/layout/GameLayout";
@@ -12,6 +13,11 @@ export default function LobbyScreen() {
   const { host, join, isWaiting, opponentId, error } = useMatchmaking();
   const [joinInput, setJoinInput] = useState("");
   const [mode, setMode] = useState<"choose" | "host" | "join">("choose");
+
+  // Ensure menu music is playing (continue from title or restart if needed)
+  useEffect(() => {
+    playMusic("menu");
+  }, []);
 
   // The matchmaking hooks (useMatchmaking) handle the screen transition
   // to "draft" once both sides have exchanged signals and initDraft() has
