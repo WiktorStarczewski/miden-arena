@@ -1,10 +1,21 @@
 import GlassPanel from "../layout/GlassPanel";
 
+interface ElementChartProps {
+  compact?: boolean;
+}
+
 const ELEMENTS = [
   { id: "fire", label: "Fire", color: "#ff6b35", icon: "🔥" },
   { id: "water", label: "Water", color: "#4fc3f7", icon: "💧" },
   { id: "earth", label: "Earth", color: "#8d6e63", icon: "🪨" },
   { id: "wind", label: "Wind", color: "#aed581", icon: "🌪️" },
+] as const;
+
+// Advantage cycle order for vertical display: Fire → Earth → Wind → Water (→ Fire)
+const CYCLE = [
+  ELEMENTS[0], // Fire
+  ELEMENTS[3], // Earth  (Fire beats Earth)
+  ELEMENTS[2], // Wind   (Earth beats Wind... wait)
 ] as const;
 
 // Advantage cycle: Fire → Earth → Wind → Water → Fire
@@ -48,7 +59,50 @@ function arcPath(
   return `M ${from.x} ${from.y} Q ${cx} ${cy} ${to.x} ${to.y}`;
 }
 
-export default function ElementChart() {
+// Vertical cycle for compact mode: Fire beats Earth beats Wind beats Water beats Fire
+const VERTICAL_CYCLE = [
+  ELEMENTS[0], // Fire
+  ELEMENTS[2], // Earth
+  ELEMENTS[3], // Wind
+  ELEMENTS[1], // Water
+];
+
+export default function ElementChart({ compact = false }: ElementChartProps) {
+  if (compact) {
+    return (
+      <div className="bg-black/40 backdrop-blur-md border border-white/10 rounded-lg px-1.5 py-2 flex flex-col items-center gap-0.5">
+        {VERTICAL_CYCLE.map((el, i) => (
+          <div key={el.id} className="flex flex-col items-center">
+            {/* Element node */}
+            <div
+              className="w-7 h-7 rounded-full flex items-center justify-center border-[1.5px]"
+              style={{
+                borderColor: `${el.color}99`,
+                background: `${el.color}15`,
+              }}
+            >
+              <span className="text-[10px] leading-none">{el.icon}</span>
+            </div>
+            {/* Arrow to next (wraps around) */}
+            {i < VERTICAL_CYCLE.length - 1 ? (
+              <svg width="8" height="10" viewBox="0 0 8 10" className="my-[-1px]">
+                <path d="M4 0 L4 7" stroke="white" strokeOpacity={0.25} strokeWidth={1.2} fill="none" />
+                <path d="M1.5 5.5 L4 8.5 L6.5 5.5" stroke="white" strokeOpacity={0.4} strokeWidth={1.2} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            ) : (
+              /* Wrap arrow back to top */
+              <svg width="20" height="10" viewBox="0 0 20 10" className="mt-0.5">
+                <path d="M10 0 Q18 0 18 -8" stroke="white" strokeOpacity={0.15} strokeWidth={0.8} fill="none" strokeDasharray="2 2" />
+              </svg>
+            )}
+          </div>
+        ))}
+        {/* Tiny wrap indicator */}
+        <div className="w-1 h-1 rounded-full bg-white/10 mt-0.5" />
+      </div>
+    );
+  }
+
   return (
     <GlassPanel compact>
       <div className="text-[10px] uppercase tracking-wider text-white/40 font-medium mb-1 text-center">
@@ -68,7 +122,7 @@ export default function ElementChart() {
           >
             <path d="M 0 0 L 8 3 L 0 6 Z" fill="white" fillOpacity={0.5} />
           </marker>
-          {ELEMENTS.map((el, i) => (
+          {ELEMENTS.map((el) => (
             <radialGradient key={el.id} id={`glow-${el.id}`} cx="50%" cy="50%" r="50%">
               <stop offset="0%" stopColor={el.color} stopOpacity={0.3} />
               <stop offset="100%" stopColor={el.color} stopOpacity={0} />
@@ -80,7 +134,6 @@ export default function ElementChart() {
         {ARROWS.map(([fromIdx, toIdx], i) => {
           const from = POSITIONS[fromIdx];
           const to = POSITIONS[toIdx];
-          // Shorten the path so arrow doesn't overlap the node
           const dx = to.x - from.x;
           const dy = to.y - from.y;
           const len = Math.sqrt(dx * dx + dy * dy);
@@ -105,9 +158,7 @@ export default function ElementChart() {
           const pos = POSITIONS[i];
           return (
             <g key={el.id}>
-              {/* Glow */}
               <circle cx={pos.x} cy={pos.y} r={14} fill={`url(#glow-${el.id})`} />
-              {/* Ring */}
               <circle
                 cx={pos.x}
                 cy={pos.y}
@@ -118,7 +169,6 @@ export default function ElementChart() {
                 strokeWidth={1.5}
                 strokeOpacity={0.7}
               />
-              {/* Icon */}
               <text
                 x={pos.x}
                 y={pos.y + 0.5}
@@ -128,7 +178,6 @@ export default function ElementChart() {
               >
                 {el.icon}
               </text>
-              {/* Label */}
               <text
                 x={pos.x}
                 y={pos.y + (i === 0 ? -15 : i === 2 ? 16 : 0)}
@@ -146,7 +195,6 @@ export default function ElementChart() {
           );
         })}
 
-        {/* Center label */}
         <text
           x={CX}
           y={CY}

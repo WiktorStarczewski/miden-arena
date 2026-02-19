@@ -5,6 +5,7 @@ import GlassPanel from "../layout/GlassPanel";
 interface DraftTimelineProps {
   pickNumber: number;
   role: "host" | "joiner";
+  compact?: boolean;
 }
 
 // Standard A-B-B-A-A-B draft order for 6 picks
@@ -22,7 +23,82 @@ const DRAFT_LABELS = ["A", "B", "B", "A", "A", "B"];
 export default function DraftTimeline({
   pickNumber,
   role,
+  compact = false,
 }: DraftTimelineProps) {
+  if (compact) {
+    return (
+      <div className="bg-black/40 backdrop-blur-md border border-white/10 rounded-lg px-1.5 py-2 flex flex-col items-center gap-1.5">
+        {DRAFT_SEQUENCE.map((picker, index) => {
+          const pickIdx = index + 1;
+          const activePick = pickNumber + 1;
+          const isCompleted = pickIdx < activePick;
+          const isCurrent = pickIdx === activePick;
+          const isMyPick = picker === role;
+
+          return (
+            <React.Fragment key={index}>
+              <motion.div
+                className="relative"
+                animate={isCurrent ? { scale: [1, 1.1, 1] } : {}}
+                transition={
+                  isCurrent
+                    ? { duration: 1.5, repeat: Infinity, ease: "easeInOut" }
+                    : {}
+                }
+              >
+                <div
+                  className={`
+                    w-6 h-6 rounded-full flex items-center justify-center
+                    border-[1.5px] transition-all duration-300 text-[8px] font-bold
+                    ${
+                      isCompleted
+                        ? "bg-emerald-500/20 border-emerald-400/50"
+                        : isCurrent
+                          ? isMyPick
+                            ? "bg-amber-500/20 border-amber-400 shadow-md shadow-amber-400/20"
+                            : "bg-purple-500/20 border-purple-400 shadow-md shadow-purple-400/20"
+                          : "bg-white/5 border-white/15"
+                    }
+                  `}
+                >
+                  {isCompleted ? (
+                    <svg
+                      className="w-3 h-3 text-emerald-400"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={3}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  ) : (
+                    <span
+                      className={
+                        isCurrent
+                          ? isMyPick ? "text-amber-400" : "text-purple-400"
+                          : "text-white/30"
+                      }
+                    >
+                      {DRAFT_LABELS[index]}
+                    </span>
+                  )}
+                </div>
+              </motion.div>
+              {/* Connector */}
+              {index < DRAFT_SEQUENCE.length - 1 && (
+                <div
+                  className={`w-[1.5px] h-1.5 rounded-full ${
+                    isCompleted ? "bg-emerald-400/40" : "bg-white/10"
+                  }`}
+                />
+              )}
+            </React.Fragment>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <GlassPanel compact>
       <div className="text-[10px] uppercase tracking-wider text-white/40 font-medium mb-2 text-center">

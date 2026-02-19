@@ -1,7 +1,6 @@
 // react import removed — JSX transform handles it
 import { motion, AnimatePresence } from "framer-motion";
 import { getChampion } from "../../constants/champions";
-import ChampionCard from "../ui/ChampionCard";
 import GlassPanel from "../layout/GlassPanel";
 
 interface TeamPreviewProps {
@@ -9,6 +8,13 @@ interface TeamPreviewProps {
   maxSize?: number;
   label?: string;
 }
+
+const ELEMENT_COLORS: Record<string, string> = {
+  fire: "#ff6b35",
+  water: "#4fc3f7",
+  earth: "#8d6e63",
+  wind: "#aed581",
+};
 
 export default function TeamPreview({
   team,
@@ -37,6 +43,8 @@ export default function TeamPreview({
               const champion = getChampion(championId);
               if (!champion) return null;
 
+              const color = ELEMENT_COLORS[champion.element] ?? "#888";
+
               return (
                 <motion.div
                   key={`champ-${championId}`}
@@ -51,7 +59,16 @@ export default function TeamPreview({
                   layout
                   className="flex-1 min-w-0"
                 >
-                  <ChampionCard champion={champion} compact />
+                  <GlassPanel compact className="flex items-center gap-2 !py-2">
+                    {/* Element accent bar */}
+                    <div
+                      className="w-1 h-6 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: color }}
+                    />
+                    <span className="font-display font-bold text-sm text-white/90 truncate">
+                      {champion.name}
+                    </span>
+                  </GlassPanel>
                 </motion.div>
               );
             }
@@ -66,20 +83,15 @@ export default function TeamPreview({
                 <GlassPanel
                   compact
                   className="
-                    border-2 border-dashed border-white/10
+                    border-dashed border-white/10
                     bg-transparent
-                    flex items-center justify-center
-                    min-h-[48px]
+                    flex items-center gap-2 !py-2
                   "
                 >
-                  <div className="flex flex-col items-center gap-0.5">
-                    <div className="w-5 h-5 rounded-full border border-dashed border-white/15 flex items-center justify-center">
-                      <span className="text-white/20 text-xs">+</span>
-                    </div>
-                    <span className="text-[9px] text-white/15 uppercase tracking-wider">
-                      Slot {index + 1}
-                    </span>
-                  </div>
+                  <div className="w-1 h-6 rounded-full flex-shrink-0 bg-white/10" />
+                  <span className="text-xs text-white/15">
+                    Slot {index + 1}
+                  </span>
                 </GlassPanel>
               </motion.div>
             );

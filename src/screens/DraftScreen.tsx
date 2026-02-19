@@ -61,11 +61,20 @@ export default function DraftScreen() {
             element={previewChampion?.element}
           />
 
-          {/* Overlay: Draft timeline + Element chart */}
-          <div className="absolute left-4 top-4">
+          {/* Overlay: compact vertical rails on mobile, full panels on sm+ */}
+          {/* Mobile: thin left rail */}
+          <div className="absolute left-2 top-1/2 -translate-y-1/2 sm:hidden">
+            <DraftTimeline pickNumber={draft.pickNumber} role={role ?? "host"} compact />
+          </div>
+          {/* Mobile: thin right rail */}
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 sm:hidden">
+            <ElementChart compact />
+          </div>
+          {/* Desktop: full panels */}
+          <div className="absolute left-4 top-4 hidden sm:block">
             <DraftTimeline pickNumber={draft.pickNumber} role={role ?? "host"} />
           </div>
-          <div className="absolute right-4 top-4">
+          <div className="absolute right-4 top-4 hidden sm:block">
             <ElementChart />
           </div>
         </div>
