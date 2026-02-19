@@ -1,4 +1,4 @@
-import React, { useRef, useMemo, Suspense, useState } from "react";
+import React, { useRef, useMemo, Suspense, useState, useCallback } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import {
   Environment,
@@ -32,6 +32,7 @@ const ELEMENT_COLORS: Record<string, string> = {
 
 const DEFAULT_COLOR = "#888888";
 const ROTATION_SPEED = 0.4;
+const DRAG_SENSITIVITY = 0.01;
 const CAMERA_POSITION: [number, number, number] = [0, 2.5, 4.5];
 
 // GRADIENT MAP
@@ -103,15 +104,23 @@ const RotatingChampion = React.memo(function RotatingChampion({
   championId,
   elementColor,
   shouldRotate,
+  dragDeltaX,
 }: {
   championId: number;
   elementColor: string;
   shouldRotate: boolean;
+  dragDeltaX: number;
 }) {
   const groupRef = useRef<Group>(null);
 
   useFrame((_, delta) => {
-    if (groupRef.current && shouldRotate) {
+    if (!groupRef.current) return;
+    // Apply drag rotation (consumed each frame)
+    if (dragDeltaX !== 0) {
+      groupRef.current.rotation.y += dragDeltaX;
+    }
+    // Auto-rotate on top
+    if (shouldRotate) {
       groupRef.current.rotation.y += delta * ROTATION_SPEED;
     }
   });
@@ -214,7 +223,8 @@ const DraftSceneContent = React.memo(function DraftSceneContent({
   championId,
   onRotate = true,
   element,
-}: DraftStageProps) {
+  dragDeltaX,
+}: DraftStageProps & { dragDeltaX: number }) {
   const elementColor = element
     ? ELEMENT_COLORS[element] ?? DEFAULT_COLOR
     : DEFAULT_COLOR;
@@ -243,6 +253,7 @@ const DraftSceneContent = React.memo(function DraftSceneContent({
               championId={championId}
               elementColor={elementColor}
               shouldRotate={onRotate ?? true}
+              dragDeltaX={dragDeltaX}
             />
             {element && (
               <ElementalAura
@@ -274,6 +285,27 @@ const DraftSceneContent = React.memo(function DraftSceneContent({
 
 const DraftStage = React.memo(function DraftStage(props: DraftStageProps) {
   const [dpr, setDpr] = useState(1.5);
+  const [dragDeltaX, setDragDeltaX] = useState(0);
+  const isDragging = useRef(false);
+  const lastPointerX = useRef(0);
+
+  const onPointerDown = useCallback((e: React.PointerEvent) => {
+    isDragging.current = true;
+    lastPointerX.current = e.clientX;
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }, []);
+
+  const onPointerMove = useCallback((e: React.PointerEvent) => {
+    if (!isDragging.current) return;
+    const dx = e.clientX - lastPointerX.current;
+    lastPointerX.current = e.clientX;
+    setDragDeltaX(dx * DRAG_SENSITIVITY);
+  }, []);
+
+  const onPointerUp = useCallback(() => {
+    isDragging.current = false;
+    setDragDeltaX(0);
+  }, []);
 
   return (
     <Canvas
@@ -289,7 +321,12 @@ const DraftStage = React.memo(function DraftStage(props: DraftStageProps) {
         width: "100%",
         height: "100%",
         background: "#12121e",
+        cursor: isDragging.current ? "grabbing" : "grab",
       }}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerLeave={onPointerUp}
     >
       <Suspense fallback={null}>
         <PerformanceMonitor
@@ -297,7 +334,7 @@ const DraftStage = React.memo(function DraftStage(props: DraftStageProps) {
           onDecline={() => setDpr(1)}
         >
           <AdaptiveDpr pixelated />
-          <DraftSceneContent {...props} />
+          <DraftSceneContent {...props} dragDeltaX={dragDeltaX} />
         </PerformanceMonitor>
       </Suspense>
     </Canvas>
