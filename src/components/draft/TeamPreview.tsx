@@ -7,11 +7,13 @@ import GlassPanel from "../layout/GlassPanel";
 interface TeamPreviewProps {
   team: number[];
   maxSize?: number;
+  label?: string;
 }
 
 export default function TeamPreview({
   team,
   maxSize = 3,
+  label = "Your Team",
 }: TeamPreviewProps) {
   const slots = Array.from({ length: maxSize }, (_, i) =>
     i < team.length ? team[i] : null
@@ -21,7 +23,7 @@ export default function TeamPreview({
     <div className="w-full">
       <div className="flex items-center justify-between mb-2 px-1">
         <span className="text-[10px] uppercase tracking-wider text-white/40 font-medium">
-          Your Team
+          {label}
         </span>
         <span className="text-[10px] text-white/30 tabular-nums">
           {team.length}/{maxSize}

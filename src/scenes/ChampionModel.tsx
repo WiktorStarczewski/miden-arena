@@ -84,7 +84,7 @@ const LoadedModel = React.memo(function LoadedModel({
   position,
   side,
   animation,
-  elementColor,
+  elementColor: _elementColor,
 }: ChampionModelProps) {
   const groupRef = useRef<Group>(null);
   const champion = getChampion(championId);
@@ -104,27 +104,22 @@ const LoadedModel = React.memo(function LoadedModel({
 
   const { actions, mixer } = useAnimations(allAnimations, groupRef);
 
-  // Add a subtle element-colored emissive tint while preserving original materials
+  // Force champion into the opaque render pass so aura rings stay behind
   useEffect(() => {
-    const tint = new Color(elementColor);
     scene.traverse((child) => {
-      if (
-        child instanceof Mesh ||
-        child instanceof SkinnedMesh
-      ) {
-        const mat = child.material as {
-          emissive?: Color;
-          emissiveIntensity?: number;
-        };
-        if (mat && "emissive" in mat) {
-          mat.emissive = tint;
-          mat.emissiveIntensity = 0.08;
-        }
+      if (child instanceof Mesh || child instanceof SkinnedMesh) {
         child.castShadow = true;
         child.receiveShadow = true;
+        const mats = Array.isArray(child.material)
+          ? child.material
+          : [child.material];
+        for (const mat of mats) {
+          mat.depthWrite = true;
+          mat.transparent = false;
+        }
       }
     });
-  }, [scene, elementColor]);
+  }, [scene]);
 
   // Play the requested animation
   useEffect(() => {

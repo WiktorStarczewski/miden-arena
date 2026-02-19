@@ -354,9 +354,9 @@ const GroundGlowRing = React.memo(function GroundGlowRing({
   });
 
   return (
-    <group position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+    <group position={[0, -0.18, 0]} rotation={[-Math.PI / 2, 0, 0]}>
       {/* Inner ring */}
-      <mesh ref={innerRingRef}>
+      <mesh ref={innerRingRef} renderOrder={1}>
         <ringGeometry args={[0.6, 0.75, 32]} />
         <meshBasicMaterial
           color={color}
@@ -368,7 +368,7 @@ const GroundGlowRing = React.memo(function GroundGlowRing({
         />
       </mesh>
       {/* Outer ring */}
-      <mesh ref={outerRingRef}>
+      <mesh ref={outerRingRef} renderOrder={1}>
         <ringGeometry args={[0.9, 1.0, 32]} />
         <meshBasicMaterial
           color={color}
@@ -380,7 +380,7 @@ const GroundGlowRing = React.memo(function GroundGlowRing({
         />
       </mesh>
       {/* Static fill disc */}
-      <mesh>
+      <mesh renderOrder={1}>
         <circleGeometry args={[0.7, 32]} />
         <meshBasicMaterial
           color={color}

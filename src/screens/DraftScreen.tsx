@@ -127,7 +127,7 @@ export default function DraftScreen() {
             </div>
             <div>
               <p className="mb-1 text-xs font-bold text-red-400 uppercase">Opponent</p>
-              <TeamPreview team={draft.opponentTeam} />
+              <TeamPreview team={draft.opponentTeam} label="Their Team" />
             </div>
           </div>
 
