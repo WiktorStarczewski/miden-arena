@@ -37,7 +37,7 @@ export default function LobbyScreen() {
                 >
                   &#9876;
                 </motion.div>
-                <h3 className="text-xl font-bold text-green-400">Match Found!</h3>
+                <h3 className="font-display text-xl font-bold text-green-400">Match Found!</h3>
                 <AccountBadge address={opponentId} label="Opponent" />
                 {error ? (
                   <p className="text-sm text-red-400">{error}</p>
@@ -51,7 +51,7 @@ export default function LobbyScreen() {
             <>
               <GlassPanel>
                 <div className="space-y-4 text-center">
-                  <h3 className="text-lg font-bold text-white">Your Session Wallet</h3>
+                  <h3 className="font-display text-lg font-bold text-white">Your Session Wallet</h3>
                   {sessionWalletId && (
                     <AccountBadge address={sessionWalletId} label="Share this ID" />
                   )}
@@ -64,21 +64,21 @@ export default function LobbyScreen() {
                     setMode("host");
                     host();
                   }}
-                  className="rounded-xl bg-gradient-to-b from-purple-500/80 to-purple-700/80 p-6 text-center font-bold text-white shadow-lg active:scale-95"
+                  className="font-display rounded-xl bg-gradient-to-b from-purple-500/80 to-purple-700/80 p-6 text-center font-bold text-white shadow-lg active:scale-95"
                   whileHover={{ scale: 1.03 }}
                   whileTap={{ scale: 0.97 }}
                 >
-                  <div className="mb-2 text-3xl">&#9813;</div>
+                  <div className="mb-2 text-5xl">&#9813;</div>
                   Host Game
                 </motion.button>
 
                 <motion.button
                   onClick={() => setMode("join")}
-                  className="rounded-xl bg-gradient-to-b from-cyan-500/80 to-cyan-700/80 p-6 text-center font-bold text-white shadow-lg active:scale-95"
+                  className="font-display rounded-xl bg-gradient-to-b from-cyan-500/80 to-cyan-700/80 p-6 text-center font-bold text-white shadow-lg active:scale-95"
                   whileHover={{ scale: 1.03 }}
                   whileTap={{ scale: 0.97 }}
                 >
-                  <div className="mb-2 text-3xl">&#9876;</div>
+                  <div className="mb-2 text-5xl">&#9876;</div>
                   Join Game
                 </motion.button>
               </div>
@@ -87,7 +87,7 @@ export default function LobbyScreen() {
             // Hosting - waiting for opponent
             <GlassPanel>
               <div className="space-y-4 text-center">
-                <h3 className="text-lg font-bold text-white">Hosting Game</h3>
+                <h3 className="font-display text-lg font-bold text-white">Hosting Game</h3>
                 {sessionWalletId && (
                   <AccountBadge address={sessionWalletId} label="Share this ID with opponent" />
                 )}
@@ -110,7 +110,7 @@ export default function LobbyScreen() {
             // Joining
             <GlassPanel>
               <div className="space-y-4">
-                <h3 className="text-center text-lg font-bold text-white">Join Game</h3>
+                <h3 className="font-display text-center text-lg font-bold text-white">Join Game</h3>
                 <div>
                   <label className="mb-1 block text-xs text-gray-400">
                     Host&apos;s Session Wallet ID

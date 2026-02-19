@@ -45,7 +45,7 @@ export default function GameLayout({
               </button>
             )}
             {title && (
-              <h1 className="text-lg font-bold tracking-wide uppercase text-white/90">
+              <h1 className="font-display text-lg font-bold tracking-wide uppercase text-white/90">
                 {title}
               </h1>
             )}

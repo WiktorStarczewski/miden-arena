@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* Display font for titles, headings, and prominent UI text */
+.font-display {
+  font-family: 'Almendra', serif;
+}
+
 /* Dark fantasy arena theme */
 :root {
   --color-fire: #ff6b35;

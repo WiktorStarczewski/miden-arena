@@ -198,7 +198,7 @@ export default function BattleHUD({ onSubmitMove, children }: BattleHUDProps) {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     className="
-                      w-full mt-2 py-3 rounded-xl font-bold text-sm uppercase tracking-wider
+                      w-full mt-2 py-3 rounded-xl font-display font-bold text-sm uppercase tracking-wider
                       bg-amber-500/20 border border-amber-400/40 text-amber-300
                       hover:bg-amber-500/30 active:scale-[0.98]
                       transition-all duration-200

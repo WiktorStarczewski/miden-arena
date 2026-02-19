@@ -357,7 +357,10 @@ export default function BattleScreen() {
     <GameLayout title={`Round ${battle.round}`}>
       <div className="relative flex h-full flex-col overflow-hidden">
         {/* 3D Arena Scene */}
-        <div className="relative flex-shrink-0 h-[35vh] w-[calc(100%+1.5rem)] -mx-3 -mt-3 sm:h-[40vh] lg:h-[45vh]">
+        <div
+          className="relative flex-shrink-0"
+          style={{ height: "35vh", width: "calc(100% + 1.5rem)", margin: "-0.75rem -0.75rem 0" }}
+        >
           <ArenaScene
             myChampion={myActiveChampion}
             opponentChampion={opponentActiveChampion}

@@ -42,7 +42,7 @@ export default function TitleScreen() {
           Provably fair on-chain card battles
         </p>
         <p className="mt-1 text-xs text-gray-600">
-          Powered by Miden rollup
+          Powered by Miden, the Privacy Blockchain
         </p>
       </motion.div>
 

@@ -49,8 +49,13 @@ export default function DraftScreen() {
   return (
     <GameLayout title="Champion Draft">
       <div className="flex h-full flex-col">
-        {/* 3D Champion Preview — bleed past GameLayout padding */}
-        <div className="relative flex-shrink-0 h-[50vh] w-[calc(100%+1.5rem)] -mx-3 -mt-3 sm:h-[55vh]">
+        {/* 3D Champion Preview — bleed past GameLayout padding.
+             Critical: inline styles ensure Canvas gets correct dimensions
+             on first paint, before Tailwind CSS loads. */}
+        <div
+          className="relative flex-shrink-0"
+          style={{ height: "50vh", width: "calc(100% + 1.5rem)", margin: "-0.75rem -0.75rem 0" }}
+        >
           <DraftStage
             championId={previewId}
             element={previewChampion?.element}
@@ -78,7 +83,7 @@ export default function DraftScreen() {
             >
               <GlassPanel compact>
                 <p
-                  className={`text-sm font-bold ${
+                  className={`font-display text-sm font-bold ${
                     isDone
                       ? "text-green-400"
                       : isMyTurn
@@ -99,7 +104,7 @@ export default function DraftScreen() {
                 <button
                   disabled={pickDisabled}
                   onClick={() => previewId !== null && pickChampion(previewId)}
-                  className="w-full rounded-xl px-4 py-2.5 text-sm font-bold text-white
+                  className="font-display w-full rounded-xl px-4 py-2.5 text-sm font-bold text-white
                     transition-all duration-200 active:scale-[0.97]
                     disabled:opacity-40 disabled:cursor-not-allowed"
                   style={{
@@ -126,18 +131,18 @@ export default function DraftScreen() {
           {/* Teams preview */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <p className="mb-1 text-xs font-bold text-amber-400 uppercase">Your Team</p>
+              <p className="font-display mb-1 text-xs font-bold text-amber-400 uppercase">Your Team</p>
               <TeamPreview team={draft.myTeam} />
             </div>
             <div>
-              <p className="mb-1 text-xs font-bold text-red-400 uppercase">Opponent</p>
+              <p className="font-display mb-1 text-xs font-bold text-red-400 uppercase">Opponent</p>
               <TeamPreview team={draft.opponentTeam} label="Their Team" />
             </div>
           </div>
 
           {/* Champion pool — scrollable */}
           <div className="flex min-h-0 flex-1 flex-col">
-            <p className="mb-2 text-xs font-bold text-gray-400 uppercase flex-shrink-0">Available Champions</p>
+            <p className="font-display mb-2 text-xs font-bold text-gray-400 uppercase flex-shrink-0">Available Champions</p>
             <div className="flex-1 overflow-y-auto min-h-0 -m-1 p-1">
               <DraftPool
                 pool={draft.pool}

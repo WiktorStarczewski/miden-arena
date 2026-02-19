@@ -78,7 +78,7 @@ export default function GameOverScreen() {
               <div className="text-center">
                 <p className="mb-1 text-xs text-gray-400 uppercase">Most Valuable Champion</p>
                 <p
-                  className="text-xl font-bold"
+                  className="font-display text-xl font-bold"
                   style={{ color: ELEMENT_COLORS[mvpChampion.element] }}
                 >
                   {mvpChampion.name}
