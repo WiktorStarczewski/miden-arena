@@ -12,9 +12,9 @@ import type { TurnEvent, TurnRecord } from "../types";
 // ---------------------------------------------------------------------------
 
 /** How long to display an attack action (projectile + impact) before the next. */
-const ATTACK_PHASE_MS = 1500;
+const ATTACK_PHASE_MS = 1000;
 /** How long to display a buff/heal self-effect before the next action. */
-const SELF_PHASE_MS = 1000;
+const SELF_PHASE_MS = 800;
 /** Brief pause between first and second actions. */
 const GAP_MS = 300;
 

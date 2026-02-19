@@ -54,9 +54,9 @@ const ELEMENT_FLASH_COLORS: Record<string, string> = {
   wind: "#f1f8e9",
 };
 
-const TRAVEL_DURATION = 0.40;
-const IMPACT_DURATION = 0.55;
-const LINGER_DURATION = 0.8;
+const TRAVEL_DURATION = 0.20;
+const IMPACT_DURATION = 0.40;
+const LINGER_DURATION = 0.6;
 const PROJECTILE_BASE_SIZE = 0.35;
 const IMPACT_MAX_SCALE = 5.0;
 const SHOCKWAVE_MAX_SCALE = 7.0;
