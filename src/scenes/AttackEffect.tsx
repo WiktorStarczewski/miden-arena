@@ -837,32 +837,12 @@ const AttackEffect = React.memo(function AttackEffect({
 
   const trailPositions = useRef<Vector3[]>([]);
 
-  // Raise the arc midpoint for a parabolic trajectory
-  const midpoint = useMemo(() => {
-    const mid = new Vector3().lerpVectors(startVec, endVec, 0.5);
-    mid.y += 1.8;
-    return mid;
-  }, [startVec, endVec]);
-
-  // Quadratic bezier interpolation
-  const getPositionOnCurve = useMemo(() => {
+  // Straight-line path — magical bolt fired directly at the target
+  const getPositionOnPath = useMemo(() => {
     return (t: number): Vector3 => {
-      const invT = 1 - t;
-      const x =
-        invT * invT * startVec.x +
-        2 * invT * t * midpoint.x +
-        t * t * endVec.x;
-      const y =
-        invT * invT * startVec.y +
-        2 * invT * t * midpoint.y +
-        t * t * endVec.y;
-      const z =
-        invT * invT * startVec.z +
-        2 * invT * t * midpoint.z +
-        t * t * endVec.z;
-      return new Vector3(x, y, z);
+      return new Vector3().lerpVectors(startVec, endVec, t);
     };
-  }, [startVec, midpoint, endVec]);
+  }, [startVec, endVec]);
 
   // Call onComplete when transitioning to linger
   useEffect(() => {
@@ -889,7 +869,7 @@ const AttackEffect = React.memo(function AttackEffect({
       }
 
       if (projectileRef.current) {
-        const pos = getPositionOnCurve(progressRef.current);
+        const pos = getPositionOnPath(progressRef.current);
         projectileRef.current.position.copy(pos);
 
         // Pulsate size — grows as it approaches target
