@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+/* Dark fantasy arena theme */
+:root {
+  --color-fire: #ff6b35;
+  --color-water: #4fc3f7;
+  --color-earth: #8d6e63;
+  --color-wind: #aed581;
+  --color-bg: #0a0a1a;
+  --color-panel: rgba(0, 0, 0, 0.4);
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-text: #e0e0e0;
+  --color-text-dim: #888;
+  --color-accent: #f59e0b;
+}
+
+/* Radial gradient utility */
+.bg-gradient-radial {
+  background: radial-gradient(ellipse at center, var(--tw-gradient-from), var(--tw-gradient-to));
+}
+
+/* Custom scrollbar for dark theme */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Prevent overscroll bounce on mobile */
+html, body {
+  overscroll-behavior: none;
+}
+
+/* Tap highlight removal for mobile */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Text rendering */
+body {
+  text-rendering: optimizeLegibility;
+}
+
+/* Canvas styling for R3F */
+canvas {
+  touch-action: none;
+}

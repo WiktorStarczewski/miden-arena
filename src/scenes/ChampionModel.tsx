@@ -1,0 +1,191 @@
+import React, { useRef, useEffect, useMemo } from "react";
+import { useFrame } from "@react-three/fiber";
+import { useGLTF, useAnimations } from "@react-three/drei";
+import {
+  Group,
+  Mesh,
+  MeshToonMaterial,
+  DataTexture,
+  NearestFilter,
+  Color,
+  SkinnedMesh,
+} from "three";
+
+// TYPES
+// ================================================================================================
+
+interface ChampionModelProps {
+  championId: number;
+  position: [number, number, number];
+  side: "left" | "right";
+  animation: string;
+  elementColor: string;
+}
+
+// GRADIENT MAP
+// ================================================================================================
+
+function createGradientMap(steps: number = 4): DataTexture {
+  const colors = new Uint8Array(steps);
+  for (let i = 0; i < steps; i++) {
+    colors[i] = Math.round((i / (steps - 1)) * 255);
+  }
+  const texture = new DataTexture(colors, steps, 1);
+  texture.magFilter = NearestFilter;
+  texture.minFilter = NearestFilter;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+// FALLBACK BOX
+// ================================================================================================
+
+const FallbackBox = React.memo(function FallbackBox({
+  position,
+  side,
+  elementColor,
+}: {
+  position: [number, number, number];
+  side: "left" | "right";
+  elementColor: string;
+}) {
+  const meshRef = useRef<Mesh>(null);
+  const gradientMap = useMemo(() => createGradientMap(), []);
+
+  useFrame((_, delta) => {
+    if (meshRef.current) {
+      meshRef.current.rotation.y += delta * 0.3 * (side === "left" ? 1 : -1);
+    }
+  });
+
+  return (
+    <mesh
+      ref={meshRef}
+      position={position}
+      scale={[0.6, 1.2, 0.4]}
+      castShadow
+    >
+      <boxGeometry args={[1, 1, 1]} />
+      <meshToonMaterial
+        color={elementColor}
+        gradientMap={gradientMap}
+        emissive={new Color(elementColor)}
+        emissiveIntensity={0.15}
+      />
+    </mesh>
+  );
+});
+
+// LOADED MODEL
+// ================================================================================================
+
+const LoadedModel = React.memo(function LoadedModel({
+  championId,
+  position,
+  side,
+  animation,
+  elementColor,
+}: ChampionModelProps) {
+  const groupRef = useRef<Group>(null);
+  const modelPath = `/models/champion_${championId}.glb`;
+  const { scene, animations } = useGLTF(modelPath);
+  const { actions, mixer } = useAnimations(animations, groupRef);
+  const gradientMap = useMemo(() => createGradientMap(), []);
+
+  // Apply toon material to all meshes in the model
+  useEffect(() => {
+    const toonColor = new Color(elementColor);
+    scene.traverse((child) => {
+      if (
+        child instanceof Mesh ||
+        child instanceof SkinnedMesh
+      ) {
+        const original = child.material as { map?: unknown; color?: Color };
+        const toonMat = new MeshToonMaterial({
+          color: original.color ?? toonColor,
+          gradientMap,
+          emissive: toonColor,
+          emissiveIntensity: 0.08,
+        });
+        if (original.map) {
+          (toonMat as unknown as { map: unknown }).map = original.map;
+        }
+        child.material = toonMat;
+        child.castShadow = true;
+        child.receiveShadow = true;
+      }
+    });
+  }, [scene, elementColor, gradientMap]);
+
+  // Play the requested animation
+  useEffect(() => {
+    const action = actions[animation];
+    if (action) {
+      action.reset().fadeIn(0.25).play();
+      return () => {
+        action.fadeOut(0.25);
+      };
+    }
+
+    // Try partial match (e.g., "idle" matches "Idle" or "mixamo_idle")
+    const lowerAnim = animation.toLowerCase();
+    const matchKey = Object.keys(actions).find(
+      (key) => key.toLowerCase().includes(lowerAnim)
+    );
+    if (matchKey && actions[matchKey]) {
+      const fallbackAction = actions[matchKey]!;
+      fallbackAction.reset().fadeIn(0.25).play();
+      return () => {
+        fallbackAction.fadeOut(0.25);
+      };
+    }
+
+    // Play first available animation as last resort
+    const firstKey = Object.keys(actions)[0];
+    if (firstKey && actions[firstKey]) {
+      const firstAction = actions[firstKey]!;
+      firstAction.reset().fadeIn(0.25).play();
+      return () => {
+        firstAction.fadeOut(0.25);
+      };
+    }
+  }, [animation, actions, mixer]);
+
+  // Mirror the model for the right side so champions face each other
+  const scaleX = side === "right" ? -1 : 1;
+  const rotationY = side === "right" ? Math.PI : 0;
+
+  return (
+    <group
+      ref={groupRef}
+      position={position}
+      rotation={[0, rotationY, 0]}
+      scale={[scaleX, 1, 1]}
+    >
+      <primitive object={scene} />
+    </group>
+  );
+});
+
+// MAIN COMPONENT
+// ================================================================================================
+
+const ChampionModel = React.memo(function ChampionModel(
+  props: ChampionModelProps
+) {
+  return (
+    <React.Suspense
+      fallback={
+        <FallbackBox
+          position={props.position}
+          side={props.side}
+          elementColor={props.elementColor}
+        />
+      }
+    >
+      <LoadedModel {...props} />
+    </React.Suspense>
+  );
+});
+
+export default ChampionModel;
