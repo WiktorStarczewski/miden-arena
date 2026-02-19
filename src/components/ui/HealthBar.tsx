@@ -1,4 +1,3 @@
-import React from "react";
 import { useSpring, animated } from "@react-spring/web";
 
 interface HealthBarProps {
@@ -62,8 +61,7 @@ export default function HealthBar({
 
         {/* Animated fill */}
         <animated.div
-          style={spring}
-          className="absolute inset-y-0 left-0 rounded-full"
+          style={{ ...spring, position: "absolute" as const, inset: "0", left: "0", borderRadius: "9999px" }}
         />
       </div>
     </div>

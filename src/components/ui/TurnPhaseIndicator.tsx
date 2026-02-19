@@ -1,4 +1,4 @@
-import React from "react";
+// react import removed — JSX transform handles it
 import { motion } from "framer-motion";
 import GlassPanel from "../layout/GlassPanel";
 

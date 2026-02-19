@@ -410,7 +410,7 @@ const FireEmbers = React.memo(function FireEmbers({
   const count = Math.round(8 * performanceScale);
 
   const emberData = useMemo(() => {
-    return Array.from({ length: count }, (_, i) => ({
+    return Array.from({ length: count }, () => ({
       offset: Math.random() * Math.PI * 2,
       speed: 0.5 + Math.random() * 1.5,
       radius: 0.2 + Math.random() * 0.6,
@@ -447,7 +447,7 @@ const FireEmbers = React.memo(function FireEmbers({
 
   return (
     <group ref={groupRef}>
-      {emberData.map((data, i) => (
+      {emberData.map((_data, i) => (
         <mesh key={i} position={[0, 0, 0]}>
           <sphereGeometry args={[1, 6, 6]} />
           <meshBasicMaterial

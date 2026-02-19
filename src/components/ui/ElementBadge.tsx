@@ -1,4 +1,4 @@
-import React from "react";
+// react import removed — JSX transform handles it
 import type { Element } from "../../types/game";
 
 interface ElementBadgeProps {

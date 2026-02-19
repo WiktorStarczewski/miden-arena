@@ -1,4 +1,4 @@
-import React from "react";
+// react import removed — JSX transform handles it
 import { motion, AnimatePresence } from "framer-motion";
 import { getChampion } from "../../constants/champions";
 import ChampionCard from "../ui/ChampionCard";

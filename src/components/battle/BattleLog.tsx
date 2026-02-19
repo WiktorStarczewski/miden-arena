@@ -1,6 +1,7 @@
-import React, { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import GlassPanel from "../layout/GlassPanel";
+import { getChampion } from "../../constants/champions";
 import type { TurnRecord, TurnEvent } from "../../types/game";
 
 interface BattleLogProps {
@@ -20,11 +21,28 @@ function getEventColor(event: TurnEvent): string {
 }
 
 function formatEvent(event: TurnEvent): string {
-  if (typeof event === "string") return event;
-  // If event is an object with a message field
-  if (event.message) return event.message;
-  if (event.description) return event.description;
-  return JSON.stringify(event);
+  switch (event.type) {
+    case "attack": {
+      const attacker = getChampion(event.attackerId).name;
+      const defender = getChampion(event.defenderId).name;
+      const suffix = event.isSuperEffective ? " (super effective!)" : event.isResisted ? " (resisted)" : "";
+      return `${attacker} hit ${defender} for ${event.damage} damage${suffix}`;
+    }
+    case "heal":
+      return `${getChampion(event.championId).name} healed for ${event.amount} HP`;
+    case "buff":
+      return `${getChampion(event.championId).name} gained +${event.value} ${event.stat} (${event.duration}t)`;
+    case "debuff":
+      return `${getChampion(event.targetId).name} got -${event.value} ${event.stat} (${event.duration}t)`;
+    case "burn_tick":
+      return `${getChampion(event.championId).name} took ${event.damage} burn damage`;
+    case "burn_applied":
+      return `${getChampion(event.targetId).name} is burning (${event.duration}t)`;
+    case "ko":
+      return `${getChampion(event.championId).name} was KO'd!`;
+    default:
+      return JSON.stringify(event);
+  }
 }
 
 export default function BattleLog({ log }: BattleLogProps) {
@@ -127,17 +145,13 @@ export default function BattleLog({ log }: BattleLogProps) {
                         {record.myAction && (
                           <div className="text-[11px] text-sky-400/80">
                             <span className="text-white/30">You: </span>
-                            {typeof record.myAction === "string"
-                              ? record.myAction
-                              : record.myAction.abilityName ?? "action"}
+                            {getChampion(record.myAction.championId).abilities[record.myAction.abilityIndex]?.name ?? "action"}
                           </div>
                         )}
                         {record.opponentAction && (
                           <div className="text-[11px] text-red-400/80">
                             <span className="text-white/30">Foe: </span>
-                            {typeof record.opponentAction === "string"
-                              ? record.opponentAction
-                              : record.opponentAction.abilityName ?? "action"}
+                            {getChampion(record.opponentAction.championId).abilities[record.opponentAction.abilityIndex]?.name ?? "action"}
                           </div>
                         )}
                       </div>

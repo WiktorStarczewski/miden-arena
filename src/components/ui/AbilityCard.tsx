@@ -1,4 +1,4 @@
-import React from "react";
+// react import removed — JSX transform handles it
 import type { Ability } from "../../types/game";
 import GlassPanel from "../layout/GlassPanel";
 

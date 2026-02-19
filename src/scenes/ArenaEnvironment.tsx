@@ -256,8 +256,6 @@ const GroundMist = React.memo(function GroundMist({
 }: {
   count: number;
 }) {
-  const groupRef = useRef<Mesh[]>([]);
-
   const mistData = useMemo(() => {
     return Array.from({ length: count }, () => ({
       x: (Math.random() - 0.5) * 14,

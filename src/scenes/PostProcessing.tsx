@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect, useMemo } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import { useFrame } from "@react-three/fiber";
 import { EffectComposer, Bloom, Vignette } from "@react-three/postprocessing";
 
@@ -113,6 +113,24 @@ const PostProcessing = React.memo(function PostProcessing({
     return null;
   }
 
+  if (vignetteEnabled) {
+    return (
+      <EffectComposer multisampling={isHighQuality ? 4 : 0}>
+        <Bloom
+          intensity={actualBloomIntensity}
+          luminanceThreshold={bloomThreshold}
+          luminanceSmoothing={BLOOM_LUMINANCE_SMOOTHING}
+          radius={bloomRadius}
+          mipmapBlur={isHighQuality}
+        />
+        <Vignette
+          offset={VIGNETTE_OFFSET}
+          darkness={VIGNETTE_DARKNESS}
+        />
+      </EffectComposer>
+    );
+  }
+
   return (
     <EffectComposer multisampling={isHighQuality ? 4 : 0}>
       <Bloom
@@ -122,12 +140,6 @@ const PostProcessing = React.memo(function PostProcessing({
         radius={bloomRadius}
         mipmapBlur={isHighQuality}
       />
-      {vignetteEnabled && (
-        <Vignette
-          offset={VIGNETTE_OFFSET}
-          darkness={VIGNETTE_DARKNESS}
-        />
-      )}
     </EffectComposer>
   );
 });

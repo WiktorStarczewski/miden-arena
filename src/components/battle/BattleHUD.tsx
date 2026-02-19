@@ -1,4 +1,4 @@
-import React from "react";
+import { type ReactNode } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useGameStore } from "../../store/gameStore";
 import { getChampion } from "../../constants/champions";
@@ -8,10 +8,11 @@ import ElementBadge from "../ui/ElementBadge";
 import StatusEffectIcon from "../ui/StatusEffectIcon";
 import AbilityCard from "../ui/AbilityCard";
 import TurnPhaseIndicator from "../ui/TurnPhaseIndicator";
-import type { Champion, ChampionState } from "../../types/game";
+import type { Champion, ChampionState, TurnAction } from "../../types/game";
 
 interface BattleHUDProps {
-  children?: React.ReactNode;
+  onSubmitMove?: (action: TurnAction) => void | Promise<void>;
+  children?: ReactNode;
 }
 
 interface FighterPanelProps {
@@ -75,7 +76,7 @@ function FighterPanel({
   );
 }
 
-export default function BattleHUD({ children }: BattleHUDProps) {
+export default function BattleHUD({ onSubmitMove, children }: BattleHUDProps) {
   const battle = useGameStore((state) => state.battle);
 
   if (!battle) return null;
@@ -84,25 +85,23 @@ export default function BattleHUD({ children }: BattleHUDProps) {
     phase,
     selectedChampion,
     selectedAbility,
-    myTeam,
-    opponentTeam,
-    myActiveChampion,
-    opponentActiveChampion,
+    myChampions,
+    opponentChampions,
   } = battle;
 
-  // Resolve champion data
-  const myChampionState = myTeam?.find(
-    (c: ChampionState) => c.id === myActiveChampion
-  );
-  const opponentChampionState = opponentTeam?.find(
-    (c: ChampionState) => c.id === opponentActiveChampion
+  // Find the active (selected or first surviving) champion for each side
+  const myChampionState = selectedChampion != null
+    ? myChampions.find((c: ChampionState) => c.id === selectedChampion)
+    : myChampions.find((c: ChampionState) => !c.isKO);
+  const opponentChampionState = opponentChampions.find(
+    (c: ChampionState) => !c.isKO,
   );
 
-  const myChampion = myActiveChampion
-    ? getChampion(myActiveChampion)
+  const myChampion = myChampionState
+    ? getChampion(myChampionState.id)
     : undefined;
-  const opponentChampion = opponentActiveChampion
-    ? getChampion(opponentActiveChampion)
+  const opponentChampion = opponentChampionState
+    ? getChampion(opponentChampionState.id)
     : undefined;
 
   const isChoosing = phase === "choosing";
@@ -182,9 +181,8 @@ export default function BattleHUD({ children }: BattleHUDProps) {
                       transition-all duration-200
                     "
                     onClick={() => {
-                      const store = useGameStore.getState();
-                      if (store.confirmAction) {
-                        store.confirmAction();
+                      if (onSubmitMove && selectedChampion != null && selectedAbility != null) {
+                        onSubmitMove({ championId: selectedChampion, abilityIndex: selectedAbility });
                       }
                     }}
                   >

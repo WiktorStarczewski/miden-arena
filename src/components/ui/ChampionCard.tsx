@@ -1,4 +1,4 @@
-import React from "react";
+// react import removed — JSX transform handles it
 import type { Champion, Element } from "../../types/game";
 import GlassPanel from "../layout/GlassPanel";
 import ElementBadge from "./ElementBadge";
