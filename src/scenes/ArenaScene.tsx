@@ -7,7 +7,7 @@ import React, {
   useEffect,
 } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { AdaptiveDpr, PerformanceMonitor, Sparkles } from "@react-three/drei";
+import { AdaptiveDpr, Html, PerformanceMonitor, Sparkles } from "@react-three/drei";
 import {
   Vector3,
   BufferGeometry,
@@ -19,6 +19,7 @@ import {
   Mesh,
   MeshBasicMaterial,
   DoubleSide,
+  Group,
 } from "three";
 
 import ArenaEnvironment from "./ArenaEnvironment";
@@ -57,6 +58,13 @@ interface SelfEffectState {
   key?: number;
 }
 
+interface IndicatorData {
+  id: number;
+  side: "left" | "right";
+  text: string;
+  color: string;
+}
+
 interface ArenaSceneProps {
   myChampion?: ChampionState;
   opponentChampion?: ChampionState;
@@ -68,6 +76,8 @@ interface ArenaSceneProps {
   koTarget?: "left" | "right" | null;
   /** Set to true to trigger victory celebration particles */
   showVictory?: boolean;
+  /** Floating damage/buff indicators */
+  indicators?: IndicatorData[];
 }
 
 // CONSTANTS
@@ -577,6 +587,73 @@ const SelfEffect = React.memo(function SelfEffect({
   );
 });
 
+// FLOATING INDICATOR (damage / buff text that floats up and fades out)
+// ================================================================================================
+
+const INDICATOR_FLOAT_DURATION = 2.5;
+const INDICATOR_FLOAT_DISTANCE = 1.5;
+const INDICATOR_START_Y = 1.2;
+
+function FloatingIndicator({
+  side,
+  text,
+  color,
+}: {
+  side: "left" | "right";
+  text: string;
+  color: string;
+}) {
+  const pos = side === "left" ? LEFT_POSITION : RIGHT_POSITION;
+  const groupRef = useRef<Group>(null);
+  const htmlRef = useRef<HTMLDivElement>(null);
+  const elapsed = useRef(0);
+
+  useFrame((_, delta) => {
+    elapsed.current += delta;
+    const t = Math.min(elapsed.current / INDICATOR_FLOAT_DURATION, 1);
+
+    if (groupRef.current) {
+      const easedT = 1 - Math.pow(1 - t, 3); // ease-out cubic
+      groupRef.current.position.y = pos[1] + INDICATOR_START_Y + easedT * INDICATOR_FLOAT_DISTANCE;
+    }
+
+    if (htmlRef.current) {
+      // Pop-in scale: 1.5 → 1.0 over first 150ms
+      const scaleT = Math.min(elapsed.current / 0.15, 1);
+      const scale = 1 + (1 - scaleT) * 0.5;
+      // Fade out: start after 30% of duration
+      const fadeT = Math.max(0, (t - 0.3) / 0.7);
+      const opacity = 1 - fadeT;
+
+      htmlRef.current.style.opacity = String(opacity);
+      htmlRef.current.style.transform = `scale(${scale})`;
+    }
+  });
+
+  return (
+    <group ref={groupRef} position={[pos[0], pos[1] + INDICATOR_START_Y, pos[2]]}>
+      <Html center style={{ pointerEvents: "none" }}>
+        <div
+          ref={htmlRef}
+          style={{
+            color,
+            fontWeight: 800,
+            fontSize: "24px",
+            textShadow: `0 0 8px ${color}, 0 0 16px ${color}`,
+            whiteSpace: "nowrap",
+            pointerEvents: "none",
+            fontFamily: "'Courier New', monospace",
+            userSelect: "none",
+            letterSpacing: "1px",
+          }}
+        >
+          {text}
+        </div>
+      </Html>
+    </group>
+  );
+}
+
 // SCENE CONTENT (rendered inside Canvas)
 // ================================================================================================
 
@@ -589,6 +666,7 @@ const SceneContent = React.memo(function SceneContent({
   hitFlash,
   koTarget,
   showVictory,
+  indicators,
   performanceScale,
 }: ArenaSceneProps & {
   hitFlash: boolean;
@@ -712,6 +790,16 @@ const SceneContent = React.memo(function SceneContent({
         />
       )}
 
+      {/* Floating damage/buff indicators */}
+      {indicators?.map((ind) => (
+        <FloatingIndicator
+          key={ind.id}
+          side={ind.side}
+          text={ind.text}
+          color={ind.color}
+        />
+      ))}
+
       {/* KO explosion effect */}
       {koPosition && (
         <KoExplosion position={koPosition} active={!!koTarget} />
@@ -741,6 +829,7 @@ const ArenaScene = React.memo(function ArenaScene({
   onAttackComplete,
   koTarget,
   showVictory,
+  indicators,
 }: ArenaSceneProps) {
   const [dpr, setDpr] = useState(1.5);
   const [hitFlash, setHitFlash] = useState(false);
@@ -801,6 +890,7 @@ const ArenaScene = React.memo(function ArenaScene({
             hitFlash={hitFlash}
             koTarget={koTarget}
             showVictory={showVictory}
+            indicators={indicators}
             performanceScale={performanceScale}
           />
         </PerformanceMonitor>

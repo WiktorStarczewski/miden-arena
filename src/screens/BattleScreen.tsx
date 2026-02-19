@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useGameStore } from "../store/gameStore";
 import { useCombatTurn } from "../hooks/useCombatTurn";
 import { getChampion } from "../constants/champions";
@@ -20,6 +20,16 @@ const GAP_MS = 300;
 
 type AnimSubPhase = "first" | "gap" | "second" | "settle";
 
+interface ActionIndicator {
+  side: "left" | "right";
+  text: string;
+  color: string;
+}
+
+interface IndicatorData extends ActionIndicator {
+  id: number;
+}
+
 interface AnimAction {
   /** "attack" = projectile toward enemy; "self" = buff/heal glow on caster */
   type: "attack" | "self";
@@ -29,13 +39,15 @@ interface AnimAction {
   element: string;
   /** Only set when type === "self" */
   selfType?: "buff" | "heal";
+  /** Floating indicator to show after this action's visual effect completes */
+  indicator?: ActionIndicator;
 }
 
 interface AnimScript {
   myChampionId: number;
   oppChampionId: number;
   first: AnimAction;
-  second: AnimAction | null;
+  second: AnimAction;
 }
 
 // ---------------------------------------------------------------------------
@@ -98,6 +110,39 @@ function toAnimAction(
   };
 }
 
+function abbreviateStat(stat: string): string {
+  switch (stat) {
+    case "defense": return "DEF";
+    case "attack": return "ATK";
+    case "speed": return "SPD";
+    default: return stat.toUpperCase();
+  }
+}
+
+function extractIndicator(
+  events: TurnEvent[],
+  actorId: number,
+  opponentId: number,
+  actorSide: "left" | "right",
+): ActionIndicator | undefined {
+  const targetSide: "left" | "right" = actorSide === "left" ? "right" : "left";
+  for (const e of events) {
+    if (e.type === "attack" && e.attackerId === actorId) {
+      return { side: targetSide, text: `-${e.damage}`, color: "#ff4444" };
+    }
+    if (e.type === "heal" && e.championId === actorId) {
+      return { side: actorSide, text: `+${e.amount} HP`, color: "#4ade80" };
+    }
+    if (e.type === "buff" && e.championId === actorId) {
+      return { side: actorSide, text: `+${e.value} ${abbreviateStat(e.stat)}`, color: "#fbbf24" };
+    }
+    if (e.type === "debuff" && e.targetId === opponentId) {
+      return { side: targetSide, text: `-${e.value} ${abbreviateStat(e.stat)}`, color: "#a855f7" };
+    }
+  }
+  return undefined;
+}
+
 /** Build the two-step animation script from a resolved turn. */
 function buildAnimScript(
   record: TurnRecord,
@@ -124,6 +169,9 @@ function buildAnimScript(
   const firstSide: "left" | "right" = firstIsMe ? "left" : "right";
   const secondSide: "left" | "right" = firstIsMe ? "right" : "left";
 
+  // Always animate both actions — only the indicator depends on whether the
+  // second champion's action actually had an effect (they may have been KO'd
+  // by the first hit, or a heal at full HP produces no event).
   const secondActed = didSecondAct(
     record.events,
     secondChamp.id,
@@ -133,10 +181,16 @@ function buildAnimScript(
   return {
     myChampionId: record.myAction.championId,
     oppChampionId: record.opponentAction.championId,
-    first: toAnimAction(firstAbility.type, firstSide, firstChamp.element),
-    second: secondActed
-      ? toAnimAction(secondAbility.type, secondSide, secondChamp.element)
-      : null,
+    first: {
+      ...toAnimAction(firstAbility.type, firstSide, firstChamp.element),
+      indicator: extractIndicator(record.events, firstChamp.id, secondChamp.id, firstSide),
+    },
+    second: {
+      ...toAnimAction(secondAbility.type, secondSide, secondChamp.element),
+      indicator: secondActed
+        ? extractIndicator(record.events, secondChamp.id, firstChamp.id, secondSide)
+        : undefined,
+    },
   };
 }
 
@@ -149,6 +203,16 @@ export default function BattleScreen() {
   const { submitMove, phase } = useCombatTurn();
 
   const [animSubPhase, setAnimSubPhase] = useState<AnimSubPhase | null>(null);
+  const [indicators, setIndicators] = useState<IndicatorData[]>([]);
+  const indicatorIdRef = useRef(0);
+
+  const addIndicator = useCallback((ind: ActionIndicator) => {
+    const id = ++indicatorIdRef.current;
+    setIndicators((prev) => [...prev, { ...ind, id }]);
+    setTimeout(() => {
+      setIndicators((prev) => prev.filter((i) => i.id !== id));
+    }, 2800);
+  }, []);
 
   // Stable champion ID list (won't change during animation phase)
   const myChampionIds = useMemo(
@@ -163,10 +227,11 @@ export default function BattleScreen() {
     return buildAnimScript(lastTurn, myChampionIds);
   }, [phase, battle.turnLog, myChampionIds]);
 
-  // Schedule animation sub-phases
+  // Schedule animation sub-phases + floating indicators
   useEffect(() => {
     if (phase !== "animating" || !animScript) {
       setAnimSubPhase(null);
+      setIndicators([]);
       return;
     }
 
@@ -175,19 +240,34 @@ export default function BattleScreen() {
 
     // Start immediately with first action
     setAnimSubPhase("first");
+
+    // Schedule first-action indicator (attack: on projectile hit, self: near end)
+    if (animScript.first.indicator) {
+      const delay = animScript.first.type === "attack" ? 200 : 700;
+      const ind = animScript.first.indicator;
+      timers.push(setTimeout(() => addIndicator(ind), delay));
+    }
+
     t += animScript.first.type === "attack" ? ATTACK_PHASE_MS : SELF_PHASE_MS;
 
-    if (animScript.second) {
-      timers.push(setTimeout(() => setAnimSubPhase("gap"), t));
-      t += GAP_MS;
-      timers.push(setTimeout(() => setAnimSubPhase("second"), t));
-      t += animScript.second.type === "attack" ? ATTACK_PHASE_MS : SELF_PHASE_MS;
+    // Always schedule the second action (both champions always animate)
+    timers.push(setTimeout(() => setAnimSubPhase("gap"), t));
+    t += GAP_MS;
+    timers.push(setTimeout(() => setAnimSubPhase("second"), t));
+
+    // Schedule second-action indicator (only if the action had effect)
+    if (animScript.second.indicator) {
+      const delay = animScript.second.type === "attack" ? 200 : 700;
+      const ind = animScript.second.indicator;
+      timers.push(setTimeout(() => addIndicator(ind), t + delay));
     }
+
+    t += animScript.second.type === "attack" ? ATTACK_PHASE_MS : SELF_PHASE_MS;
 
     timers.push(setTimeout(() => setAnimSubPhase("settle"), t));
 
     return () => timers.forEach(clearTimeout);
-  }, [phase, animScript]);
+  }, [phase, animScript, addIndicator]);
 
   // --- Derive the current action (the one being visually played) ---
 
@@ -195,7 +275,7 @@ export default function BattleScreen() {
     animSubPhase === "first"
       ? animScript?.first ?? null
       : animSubPhase === "second"
-        ? animScript?.second ?? null
+        ? animScript?.second ?? null  // second is always set when animScript exists
         : null;
 
   // --- Champion states for the 3D scene ---
@@ -283,6 +363,7 @@ export default function BattleScreen() {
             opponentChampion={opponentActiveChampion}
             attackEffect={attackEffect}
             selfEffect={selfEffect}
+            indicators={indicators}
           />
         </div>
 

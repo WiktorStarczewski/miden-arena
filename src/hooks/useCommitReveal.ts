@@ -35,7 +35,7 @@ import {
   COMMIT_AMOUNT_OFFSET,
 } from "../engine/commitment";
 import { MIDEN_FAUCET_ID } from "../constants/miden";
-import { MOVE_MIN, MOVE_MAX } from "../constants/protocol";
+import { MOVE_MIN, MOVE_MAX, NONCE_CHUNK_MAX, COMMIT_CHUNK_MAX } from "../constants/protocol";
 import type { CommitData, RevealData } from "../types";
 
 // ---------------------------------------------------------------------------
@@ -111,9 +111,14 @@ export function useCommitReveal(): UseCommitRevealReturn {
     setOpponentMove(null);
     setError(null);
     commitDataRef.current = null;
-    // Note: handledNoteIds is NOT reset — consumed notes from prior rounds
-    // stay marked so they're never reprocessed.
-  }, [round]);
+    // Snapshot ALL current opponent notes as handled so that notes from
+    // previous rounds cannot be misclassified in the new round, even if
+    // earlier notes were missed by ID tracking (e.g. notes that arrived
+    // between syncs or were re-fetched with new JS objects).
+    for (const note of allOpponentNotes) {
+      handledNoteIds.current.add(note.noteId);
+    }
+  }, [round, allOpponentNotes]);
 
   // -----------------------------------------------------------------------
   // commit(move) - Generate commitment and send 2 hash-part notes
@@ -233,7 +238,7 @@ export function useCommitReveal(): UseCommitRevealReturn {
   }, [isRevealed, sessionWalletId, opponentId, round, sendMany, setMyReveal]);
 
   // -----------------------------------------------------------------------
-  // Detect opponent commit notes: 2 new notes with amount > COMMIT_AMOUNT_OFFSET
+  // Detect opponent commit notes: 2 new notes with amount in commit range
   // -----------------------------------------------------------------------
   useEffect(() => {
     if (opponentCommitted) return;
@@ -242,9 +247,10 @@ export function useCommitReveal(): UseCommitRevealReturn {
       (n) => !handledNoteIds.current.has(n.noteId),
     );
 
-    // Commit notes have amounts in [COMMIT_AMOUNT_OFFSET+1, COMMIT_AMOUNT_OFFSET+65536]
+    // Commit amounts live in (COMMIT_AMOUNT_OFFSET, COMMIT_CHUNK_MAX].
+    // The upper bound excludes stake notes (10M) and other high-value notes.
     const commitCandidates = newNotes.filter(
-      (n) => n.amount > COMMIT_AMOUNT_OFFSET,
+      (n) => n.amount > COMMIT_AMOUNT_OFFSET && n.amount <= COMMIT_CHUNK_MAX,
     );
 
     if (commitCandidates.length < 2) return;
@@ -273,8 +279,8 @@ export function useCommitReveal(): UseCommitRevealReturn {
   }, [opponentCommitted, allOpponentNotes, round, setOpponentCommitNotes]);
 
   // -----------------------------------------------------------------------
-  // Detect opponent reveal notes: 3 new notes with amount <= COMMIT_AMOUNT_OFFSET
-  // (1 move in [1,20] + 2 nonce parts in [21,65556])
+  // Detect opponent reveal notes: 3 new notes with amount <= NONCE_CHUNK_MAX
+  // (1 move in [1,20] + 2 nonce parts in [21, NONCE_CHUNK_MAX])
   // -----------------------------------------------------------------------
   useEffect(() => {
     if (!opponentCommitted || opponentRevealed) return;
@@ -283,9 +289,12 @@ export function useCommitReveal(): UseCommitRevealReturn {
       (n) => !handledNoteIds.current.has(n.noteId),
     );
 
-    // Reveal notes have amounts <= COMMIT_AMOUNT_OFFSET
+    // Reveal notes: move in [1, 20], nonce parts in [21, NONCE_CHUNK_MAX].
+    // Cap at NONCE_CHUNK_MAX instead of COMMIT_AMOUNT_OFFSET to exclude
+    // stray signal notes (join=100, accept=101) that could contaminate
+    // nonce part detection.
     const revealCandidates = newNotes.filter(
-      (n) => n.amount > 0n && n.amount <= COMMIT_AMOUNT_OFFSET,
+      (n) => n.amount > 0n && n.amount <= NONCE_CHUNK_MAX,
     );
 
     if (revealCandidates.length < 3) return;
@@ -349,8 +358,13 @@ export function useCommitReveal(): UseCommitRevealReturn {
         console.error("[useCommitReveal] opponent reveal verification FAILED", {
           round,
           oppMove,
+          noncePart1: noncePart1.toString(),
+          noncePart2: noncePart2.toString(),
           commitPart1: commitPart1.toString(),
           commitPart2: commitPart2.toString(),
+          revealNoteIds: [moveNote!.noteId, nonceParts[0].noteId, nonceParts[1].noteId],
+          commitNoteIds: commitNoteRefs.map((n) => n.noteId),
+          unhandledNoteCount: newNotes.length,
         });
         setError("Opponent reveal verification failed - possible cheating detected.");
       }
