@@ -6,6 +6,7 @@ import { getChampion } from "../constants/champions";
 import GameLayout from "../components/layout/GameLayout";
 import DraftPool from "../components/draft/DraftPool";
 import DraftTimeline from "../components/draft/DraftTimeline";
+import ElementChart from "../components/draft/ElementChart";
 import TeamPreview from "../components/draft/TeamPreview";
 import DraftStage from "../scenes/DraftStage";
 import GlassPanel from "../components/layout/GlassPanel";
@@ -48,16 +49,19 @@ export default function DraftScreen() {
   return (
     <GameLayout title="Champion Draft">
       <div className="flex h-full flex-col">
-        {/* 3D Champion Preview — larger viewport */}
-        <div className="relative h-[50vh] w-full sm:h-[55vh]">
+        {/* 3D Champion Preview — bleed past GameLayout padding */}
+        <div className="relative flex-shrink-0 h-[50vh] w-[calc(100%+1.5rem)] -mx-3 -mt-3 sm:h-[55vh]">
           <DraftStage
             championId={previewId}
             element={previewChampion?.element}
           />
 
-          {/* Overlay: Draft timeline */}
-          <div className="absolute left-2 top-2">
+          {/* Overlay: Draft timeline + Element chart */}
+          <div className="absolute left-4 top-4">
             <DraftTimeline pickNumber={draft.pickNumber} role={role ?? "host"} />
+          </div>
+          <div className="absolute right-4 top-4">
+            <ElementChart />
           </div>
         </div>
 
