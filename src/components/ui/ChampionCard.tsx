@@ -70,9 +70,12 @@ export default function ChampionCard({
             </span>
             <ElementBadge element={champion.element} size="sm" />
           </div>
-          <span className="text-xs text-white/50 tabular-nums flex-shrink-0">
-            {champion.hp} HP
-          </span>
+          <div className="flex items-center gap-2 flex-shrink-0 text-[11px] tabular-nums">
+            <span className="text-green-400/70">{champion.hp}<span className="text-white/30 ml-0.5">HP</span></span>
+            <span className="text-red-400/70">{champion.attack}<span className="text-white/30 ml-0.5">ATK</span></span>
+            <span className="text-blue-400/70">{champion.defense}<span className="text-white/30 ml-0.5">DEF</span></span>
+            <span className="text-yellow-400/70">{champion.speed}<span className="text-white/30 ml-0.5">SPD</span></span>
+          </div>
         </GlassPanel>
       </button>
     );

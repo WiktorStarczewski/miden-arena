@@ -62,7 +62,7 @@ export default function DraftScreen() {
         </div>
 
         {/* Draft UI */}
-        <div className="flex-1 space-y-3 overflow-y-auto px-4 pb-4">
+        <div className="flex-1 min-h-0 flex flex-col space-y-3 px-4 pb-4">
           {/* Turn indicator + Pick button */}
           <AnimatePresence mode="wait">
             <motion.div
@@ -131,15 +131,17 @@ export default function DraftScreen() {
             </div>
           </div>
 
-          {/* Champion pool */}
-          <div>
-            <p className="mb-2 text-xs font-bold text-gray-400 uppercase">Available Champions</p>
-            <DraftPool
-              pool={draft.pool}
-              selectedId={previewId}
-              onSelect={(id) => setPreviewId(id)}
-              disabled={!isMyTurn || isDone}
-            />
+          {/* Champion pool — scrollable */}
+          <div className="flex min-h-0 flex-1 flex-col">
+            <p className="mb-2 text-xs font-bold text-gray-400 uppercase flex-shrink-0">Available Champions</p>
+            <div className="flex-1 overflow-y-auto min-h-0 -mx-1 px-1">
+              <DraftPool
+                pool={draft.pool}
+                selectedId={previewId}
+                onSelect={(id) => setPreviewId(id)}
+                disabled={!isMyTurn || isDone}
+              />
+            </div>
           </div>
         </div>
       </div>
