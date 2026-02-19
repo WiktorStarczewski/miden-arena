@@ -23,6 +23,7 @@ import { useNotes } from "@miden-sdk/react";
 import {
   JOIN_SIGNAL,
   ACCEPT_SIGNAL,
+  LEAVE_SIGNAL,
   DRAFT_PICK_MIN,
   DRAFT_PICK_MAX,
   COMMIT_CHUNK_MAX,
@@ -48,6 +49,8 @@ export interface UseNoteDecoderReturn {
   joinNotes: DecodedNote[];
   /** Notes where amount === ACCEPT_SIGNAL (101). */
   acceptNotes: DecodedNote[];
+  /** Notes where amount === LEAVE_SIGNAL (102). */
+  leaveNotes: DecodedNote[];
   /** Notes where amount is in [1, 10] (draft pick range). */
   draftPickNotes: DecodedNote[];
   /** Notes where amount is in [1, COMMIT_CHUNK_MAX] (hash chunks). */
@@ -77,6 +80,7 @@ export function useNoteDecoder(opponentId: string | null): UseNoteDecoderReturn 
     const empty: UseNoteDecoderReturn = {
       joinNotes: [],
       acceptNotes: [],
+      leaveNotes: [],
       draftPickNotes: [],
       commitNotes: [],
       revealNotes: [],
@@ -98,6 +102,7 @@ export function useNoteDecoder(opponentId: string | null): UseNoteDecoderReturn 
 
     const joinNotes: DecodedNote[] = [];
     const acceptNotes: DecodedNote[] = [];
+    const leaveNotes: DecodedNote[] = [];
     const draftPickNotes: DecodedNote[] = [];
     const commitNotes: DecodedNote[] = [];
     const revealNotes: DecodedNote[] = [];
@@ -110,6 +115,8 @@ export function useNoteDecoder(opponentId: string | null): UseNoteDecoderReturn 
         joinNotes.push(note);
       } else if (a === ACCEPT_SIGNAL) {
         acceptNotes.push(note);
+      } else if (a === LEAVE_SIGNAL) {
+        leaveNotes.push(note);
       } else if (a === STAKE_AMOUNT) {
         stakeNotes.push(note);
       } else if (a >= DRAFT_PICK_MIN && a <= DRAFT_PICK_MAX) {
@@ -131,6 +138,7 @@ export function useNoteDecoder(opponentId: string | null): UseNoteDecoderReturn 
     return {
       joinNotes,
       acceptNotes,
+      leaveNotes,
       draftPickNotes,
       commitNotes,
       revealNotes,

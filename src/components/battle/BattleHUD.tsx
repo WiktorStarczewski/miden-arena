@@ -119,16 +119,13 @@ export default function BattleHUD({ onSubmitMove, children }: BattleHUDProps) {
         )}
       </div>
 
-      {/* Arena area - middle, expandable */}
-      <div className="flex-1 relative flex items-center justify-center min-h-0">
-        {/* Phase indicator - floating center */}
-        <div className="absolute top-2 left-0 right-0 z-20 px-4">
-          <TurnPhaseIndicator phase={phase} />
-        </div>
-
-        {/* Arena content slot */}
-        <div className="w-full h-full">{children}</div>
+      {/* Phase indicator */}
+      <div className="flex-shrink-0 px-4 my-2">
+        <TurnPhaseIndicator phase={phase} />
       </div>
+
+      {/* Arena content slot */}
+      {children && <div className="flex-1 min-h-0">{children}</div>}
 
       {/* My info + abilities - bottom */}
       <div className="flex-shrink-0 px-1 mt-2">

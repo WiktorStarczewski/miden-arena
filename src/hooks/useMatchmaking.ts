@@ -16,10 +16,10 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useSend, useNotes } from "@miden-sdk/react";
-import { JOIN_SIGNAL, ACCEPT_SIGNAL } from "../constants/protocol";
+import { JOIN_SIGNAL, ACCEPT_SIGNAL, LEAVE_SIGNAL } from "../constants/protocol";
 import { MIDEN_FAUCET_ID } from "../constants/miden";
 import { useGameStore } from "../store/gameStore";
-import { saveOpponentId, saveRole } from "../utils/persistence";
+import { saveOpponentId, saveRole, clearGameState, getOpponentId } from "../utils/persistence";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -64,11 +64,25 @@ export function useMatchmaking(): UseMatchmakingReturn {
   // host() - Wait for a JOIN signal
   // -----------------------------------------------------------------------
   const host = useCallback(() => {
+    // If rehosting, notify the previous opponent and clear persisted state
+    const prevOpponent = getOpponentId();
+    if (prevOpponent && sessionWalletId) {
+      send({
+        from: sessionWalletId,
+        to: prevOpponent,
+        assetId: MIDEN_FAUCET_ID,
+        amount: LEAVE_SIGNAL,
+        noteType: "public",
+      }).catch(() => { /* best-effort */ });
+    }
+    clearGameState();
+
     setLocalRole("host");
+    setOpponentId(null);
     setIsWaiting(true);
     setError(null);
     matchCompletedRef.current = false;
-  }, []);
+  }, [sessionWalletId, send]);
 
   // -----------------------------------------------------------------------
   // join() - Send JOIN signal and wait for ACCEPT

@@ -2,7 +2,6 @@ import React, { useRef, useMemo, Suspense, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import {
   Environment,
-  ContactShadows,
   AdaptiveDpr,
   PerformanceMonitor,
 } from "@react-three/drei";
@@ -257,15 +256,7 @@ const DraftSceneContent = React.memo(function DraftSceneContent({
           <EmptyPedestal />
         )}
 
-        {/* Contact shadows */}
-        <ContactShadows
-          position={[0, 0, 0]}
-          opacity={0.5}
-          scale={5}
-          blur={2}
-          far={3}
-          color="#000020"
-        />
+        {/* Pedestal provides visual grounding; ContactShadows removed to avoid z-fighting */}
       </group>
 
       {/* Post-processing - softer for draft */}

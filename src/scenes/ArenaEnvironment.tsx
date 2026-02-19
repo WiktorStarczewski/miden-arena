@@ -533,7 +533,7 @@ const ArenaEnvironment = React.memo(function ArenaEnvironment({
 
       {/* Contact shadows for grounding characters */}
       <ContactShadows
-        position={[0, 0, 0]}
+        position={[0, -0.02, 0]}
         opacity={0.6}
         scale={12}
         blur={2.5}

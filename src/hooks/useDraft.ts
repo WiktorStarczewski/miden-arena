@@ -66,14 +66,33 @@ export function useDraft(): UseDraftReturn {
   const setScreen = useGameStore((s) => s.setScreen);
   const initBattle = useGameStore((s) => s.initBattle);
 
+  const resetGame = useGameStore((s) => s.resetGame);
+
   const { send } = useSend();
-  const { draftPickNotes } = useNoteDecoder(opponentId);
+  const { draftPickNotes, leaveNotes } = useNoteDecoder(opponentId);
 
   const [error, setError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
 
-  // Track how many opponent picks we have already processed
-  const processedPickCount = useRef(0);
+  // Track how many opponent picks we have already processed.
+  // Initialise to -1 as a sentinel; the first effect run snapshots the
+  // current note count so that stale notes from prior games are skipped.
+  const processedPickCount = useRef(-1);
+  const initialLeaveCount = useRef(-1);
+
+  // -----------------------------------------------------------------------
+  // Detect opponent leaving (rehost) and redirect to lobby
+  // -----------------------------------------------------------------------
+  useEffect(() => {
+    if (initialLeaveCount.current === -1) {
+      initialLeaveCount.current = leaveNotes.length;
+      return;
+    }
+    if (leaveNotes.length > initialLeaveCount.current) {
+      resetGame();
+      setScreen("lobby");
+    }
+  }, [leaveNotes, resetGame, setScreen]);
 
   // -----------------------------------------------------------------------
   // Derived state
@@ -142,6 +161,13 @@ export function useDraft(): UseDraftReturn {
   // Detect opponent draft picks
   // -----------------------------------------------------------------------
   useEffect(() => {
+    // On first run, snapshot the current note count so stale notes from
+    // previous games are not reprocessed.
+    if (processedPickCount.current === -1) {
+      processedPickCount.current = draftPickNotes.length;
+      return;
+    }
+
     if (done) return;
 
     // Process any new draft pick notes we have not handled yet

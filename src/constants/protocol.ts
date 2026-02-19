@@ -4,6 +4,9 @@ export const JOIN_SIGNAL = 100n;
 /** Amount sent to joiner to accept the match */
 export const ACCEPT_SIGNAL = 101n;
 
+/** Amount sent to opponent when leaving / rehosting */
+export const LEAVE_SIGNAL = 102n;
+
 /** Draft pick amounts: championId + 1 (1-10) */
 export const DRAFT_PICK_MIN = 1n;
 export const DRAFT_PICK_MAX = 10n;
