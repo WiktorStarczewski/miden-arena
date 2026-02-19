@@ -1,6 +1,7 @@
 const KEYS = {
   SESSION_WALLET_ID: "miden-arena:sessionWalletId",
   MIDENFI_ADDRESS: "miden-arena:midenFiAddress",
+  SETUP_COMPLETE: "miden-arena:setupComplete",
   OPPONENT_ID: "miden-arena:opponentId",
   ROLE: "miden-arena:role",
 } as const;
@@ -42,6 +43,20 @@ export function getRole(): "host" | "joiner" | null {
 export function clearGameState(): void {
   localStorage.removeItem(KEYS.OPPONENT_ID);
   localStorage.removeItem(KEYS.ROLE);
+}
+
+export function markSetupComplete(): void {
+  localStorage.setItem(KEYS.SETUP_COMPLETE, "true");
+}
+
+export function isSetupComplete(): boolean {
+  return localStorage.getItem(KEYS.SETUP_COMPLETE) === "true";
+}
+
+export function clearSessionData(): void {
+  localStorage.removeItem(KEYS.SESSION_WALLET_ID);
+  localStorage.removeItem(KEYS.MIDENFI_ADDRESS);
+  localStorage.removeItem(KEYS.SETUP_COMPLETE);
 }
 
 export function clearAll(): void {
