@@ -6,7 +6,9 @@
     <meta name="theme-color" content="#0a0a1a" />
     <title>Miden Arena - Champions Battle</title>
     <style>
-      * { margin: 0; padding: 0; box-sizing: border-box; }
+      /* Only pre-Tailwind styles needed before CSS loads (prevents FOUC).
+         Margin/padding/box-sizing reset is handled by Tailwind Preflight —
+         putting it here as unlayered CSS would override all Tailwind m-*/p-* utilities. */
       html, body, #root { width: 100%; height: 100%; overflow: hidden; }
       body {
         background: #0a0a1a;

@@ -71,7 +71,7 @@ export interface UseNoteDecoderReturn {
  *                     categorised arrays will be empty.
  */
 export function useNoteDecoder(opponentId: string | null): UseNoteDecoderReturn {
-  const rawNotes = useNotes();
+  const { noteSummaries } = useNotes({ status: "committed" });
 
   return useMemo(() => {
     const empty: UseNoteDecoderReturn = {
@@ -88,12 +88,12 @@ export function useNoteDecoder(opponentId: string | null): UseNoteDecoderReturn 
 
     // Filter to opponent + map to DecodedNote
     const opponentNotes: DecodedNote[] = [];
-    for (const note of rawNotes) {
+    for (const note of noteSummaries) {
       if (note.sender !== opponentId) continue;
       // Extract the first asset amount (all game signals use a single asset)
       const amount =
         note.assets.length > 0 ? note.assets[0].amount : 0n;
-      opponentNotes.push({ noteId: note.id, sender: note.sender, amount });
+      opponentNotes.push({ noteId: note.id, sender: note.sender!, amount });
     }
 
     const joinNotes: DecodedNote[] = [];
@@ -137,5 +137,5 @@ export function useNoteDecoder(opponentId: string | null): UseNoteDecoderReturn 
       stakeNotes,
       allOpponentNotes: opponentNotes,
     };
-  }, [rawNotes, opponentId]);
+  }, [noteSummaries, opponentId]);
 }

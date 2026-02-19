@@ -54,6 +54,7 @@ export interface UseDraftReturn {
 // ---------------------------------------------------------------------------
 
 export function useDraft(): UseDraftReturn {
+  const sessionWalletId = useGameStore((s) => s.setup.sessionWalletId);
   const opponentId = useGameStore((s) => s.match.opponentId);
   const role = useGameStore((s) => s.match.role);
   const pool = useGameStore((s) => s.draft.pool);
@@ -117,8 +118,9 @@ export function useDraft(): UseDraftReturn {
         // Send pick to opponent
         const amount = encodeDraftPick(championId);
         await send({
-          recipientAddress: opponentId,
-          faucetId: MIDEN_FAUCET_ID,
+          from: sessionWalletId!,
+          to: opponentId,
+          assetId: MIDEN_FAUCET_ID,
           amount,
           noteType: "public",
         });
@@ -133,7 +135,7 @@ export function useDraft(): UseDraftReturn {
         setIsSending(false);
       }
     },
-    [isMyTurn, pool, opponentId, send, storePickChampion],
+    [isMyTurn, pool, sessionWalletId, opponentId, send, storePickChampion],
   );
 
   // -----------------------------------------------------------------------

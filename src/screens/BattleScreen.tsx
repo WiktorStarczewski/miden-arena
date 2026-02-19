@@ -1,5 +1,4 @@
-import { Suspense, useMemo } from "react";
-import { Canvas } from "@react-three/fiber";
+import { useMemo } from "react";
 import { useGameStore } from "../store/gameStore";
 import { useCombatTurn } from "../hooks/useCombatTurn";
 import { getChampion } from "../constants/champions";
@@ -62,15 +61,11 @@ export default function BattleScreen() {
       <div className="relative flex h-full flex-col">
         {/* 3D Arena Scene - top portion */}
         <div className="relative h-[40vh] w-full sm:h-[50vh] lg:h-[55vh]">
-          <Canvas camera={{ position: [0, 2, 6], fov: 40 }}>
-            <Suspense fallback={null}>
-              <ArenaScene
-                myChampion={myActiveChampion}
-                opponentChampion={opponentActiveChampion}
-                attackEffect={attackEffect}
-              />
-            </Suspense>
-          </Canvas>
+          <ArenaScene
+            myChampion={myActiveChampion}
+            opponentChampion={opponentActiveChampion}
+            attackEffect={attackEffect}
+          />
         </div>
 
         {/* Battle HUD overlay */}

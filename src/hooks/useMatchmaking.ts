@@ -49,7 +49,7 @@ export function useMatchmaking(): UseMatchmakingReturn {
   const initDraft = useGameStore((s) => s.initDraft);
 
   const { send, stage } = useSend();
-  const rawNotes = useNotes();
+  const { noteSummaries } = useNotes({ status: "committed" });
 
   const [isWaiting, setIsWaiting] = useState(false);
   const [opponentId, setOpponentId] = useState<string | null>(null);
@@ -87,8 +87,9 @@ export function useMatchmaking(): UseMatchmakingReturn {
 
       try {
         await send({
-          recipientAddress: hostWalletId,
-          faucetId: MIDEN_FAUCET_ID,
+          from: sessionWalletId,
+          to: hostWalletId,
+          assetId: MIDEN_FAUCET_ID,
           amount: JOIN_SIGNAL,
           noteType: "public",
         });
@@ -96,6 +97,7 @@ export function useMatchmaking(): UseMatchmakingReturn {
         // The opponent ID for a joiner is the host's wallet ID
         setOpponentId(hostWalletId);
       } catch (err) {
+        console.error("[useMatchmaking] join send failed:", err);
         const message =
           err instanceof Error ? err.message : "Failed to send join signal.";
         setError(message);
@@ -111,7 +113,7 @@ export function useMatchmaking(): UseMatchmakingReturn {
   useEffect(() => {
     if (role !== "host" || !isWaiting || matchCompletedRef.current) return;
 
-    const joinNote = rawNotes.find(
+    const joinNote = noteSummaries.find(
       (n) =>
         n.assets.length > 0 &&
         n.assets[0].amount === JOIN_SIGNAL &&
@@ -122,15 +124,18 @@ export function useMatchmaking(): UseMatchmakingReturn {
 
     // Mark as handled so we do not process it twice
     handledJoinNoteIds.current.add(joinNote.id);
-    const joinerId = joinNote.sender;
+    const joinerId = joinNote.sender!;
     setOpponentId(joinerId);
 
     // Send ACCEPT back to the joiner
     (async () => {
       try {
+        if (!sessionWalletId) throw new Error("Session wallet not ready.");
+
         await send({
-          recipientAddress: joinerId,
-          faucetId: MIDEN_FAUCET_ID,
+          from: sessionWalletId,
+          to: joinerId,
+          assetId: MIDEN_FAUCET_ID,
           amount: ACCEPT_SIGNAL,
           noteType: "public",
         });
@@ -150,7 +155,7 @@ export function useMatchmaking(): UseMatchmakingReturn {
         setIsWaiting(false);
       }
     })();
-  }, [role, isWaiting, rawNotes, send, setOpponent, setScreen, initDraft]);
+  }, [role, isWaiting, noteSummaries, sessionWalletId, send, setOpponent, setScreen, initDraft]);
 
   // -----------------------------------------------------------------------
   // Joiner: detect ACCEPT note
@@ -160,7 +165,7 @@ export function useMatchmaking(): UseMatchmakingReturn {
       return;
     }
 
-    const acceptNote = rawNotes.find(
+    const acceptNote = noteSummaries.find(
       (n) =>
         n.sender === opponentId &&
         n.assets.length > 0 &&
@@ -176,7 +181,7 @@ export function useMatchmaking(): UseMatchmakingReturn {
     initDraft();
     setScreen("draft");
     setIsWaiting(false);
-  }, [role, isWaiting, opponentId, rawNotes, setOpponent, setScreen, initDraft]);
+  }, [role, isWaiting, opponentId, noteSummaries, setOpponent, setScreen, initDraft]);
 
   // Keep send stage visible for debugging, suppress unused lint
   void stage;

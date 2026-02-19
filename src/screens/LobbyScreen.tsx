@@ -9,7 +9,7 @@ import GameLayout from "../components/layout/GameLayout";
 export default function LobbyScreen() {
   const { sessionWalletId } = useGameStore((s) => s.setup);
   const setScreen = useGameStore((s) => s.setScreen);
-  const { host, join, isWaiting, opponentId } = useMatchmaking();
+  const { host, join, isWaiting, opponentId, error } = useMatchmaking();
   const [joinInput, setJoinInput] = useState("");
   const [mode, setMode] = useState<"choose" | "host" | "join">("choose");
 
@@ -25,7 +25,7 @@ export default function LobbyScreen() {
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="w-full max-w-md space-y-6"
+          className="w-full max-w-md space-y-8"
         >
           {opponentId ? (
             // Matched!
@@ -129,6 +129,9 @@ export default function LobbyScreen() {
                 >
                   {isWaiting ? "Joining..." : "Join Match"}
                 </motion.button>
+                {error && (
+                  <p className="text-center text-sm text-red-400">{error}</p>
+                )}
                 <button
                   onClick={() => setMode("choose")}
                   className="block w-full text-center text-xs text-gray-500 underline"

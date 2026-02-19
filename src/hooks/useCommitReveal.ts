@@ -68,6 +68,7 @@ export interface UseCommitRevealReturn {
 // ---------------------------------------------------------------------------
 
 export function useCommitReveal(): UseCommitRevealReturn {
+  const sessionWalletId = useGameStore((s) => s.setup.sessionWalletId);
   const opponentId = useGameStore((s) => s.match.opponentId);
   const round = useGameStore((s) => s.battle.round);
   const setMyCommit = useGameStore((s) => s.setMyCommit);
@@ -137,20 +138,15 @@ export function useCommitReveal(): UseCommitRevealReturn {
         };
 
         // Send 2 notes: hash part1 and hash part2
-        await sendMany([
-          {
-            recipientAddress: opponentId,
-            faucetId: MIDEN_FAUCET_ID,
-            amount: commitment.part1,
-            noteType: "public",
-          },
-          {
-            recipientAddress: opponentId,
-            faucetId: MIDEN_FAUCET_ID,
-            amount: commitment.part2,
-            noteType: "public",
-          },
-        ]);
+        await sendMany({
+          from: sessionWalletId!,
+          assetId: MIDEN_FAUCET_ID,
+          recipients: [
+            { to: opponentId, amount: commitment.part1 },
+            { to: opponentId, amount: commitment.part2 },
+          ],
+          noteType: "public",
+        });
 
         commitDataRef.current = commitData;
         setMyCommit(commitData);
@@ -161,7 +157,7 @@ export function useCommitReveal(): UseCommitRevealReturn {
         setError(message);
       }
     },
-    [isCommitted, opponentId, sendMany, setMyCommit],
+    [isCommitted, sessionWalletId, opponentId, sendMany, setMyCommit],
   );
 
   // -----------------------------------------------------------------------
@@ -189,26 +185,16 @@ export function useCommitReveal(): UseCommitRevealReturn {
       const { move, nonce } = commitDataRef.current;
       const revealData = createReveal(move, nonce);
 
-      await sendMany([
-        {
-          recipientAddress: opponentId,
-          faucetId: MIDEN_FAUCET_ID,
-          amount: BigInt(revealData.move),
-          noteType: "public",
-        },
-        {
-          recipientAddress: opponentId,
-          faucetId: MIDEN_FAUCET_ID,
-          amount: revealData.noncePart1,
-          noteType: "public",
-        },
-        {
-          recipientAddress: opponentId,
-          faucetId: MIDEN_FAUCET_ID,
-          amount: revealData.noncePart2,
-          noteType: "public",
-        },
-      ]);
+      await sendMany({
+        from: sessionWalletId!,
+        assetId: MIDEN_FAUCET_ID,
+        recipients: [
+          { to: opponentId!, amount: BigInt(revealData.move) },
+          { to: opponentId!, amount: revealData.noncePart1 },
+          { to: opponentId!, amount: revealData.noncePart2 },
+        ],
+        noteType: "public",
+      });
 
       const revealStoreData: RevealData = {
         move: revealData.move,
@@ -222,7 +208,7 @@ export function useCommitReveal(): UseCommitRevealReturn {
         err instanceof Error ? err.message : "Failed to send reveal.";
       setError(message);
     }
-  }, [isRevealed, opponentId, sendMany, setMyReveal]);
+  }, [isRevealed, sessionWalletId, opponentId, sendMany, setMyReveal]);
 
   // -----------------------------------------------------------------------
   // verify() - Check that an opponent's reveal matches their commitment

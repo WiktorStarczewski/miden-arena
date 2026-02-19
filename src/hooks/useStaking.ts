@@ -84,15 +84,14 @@ export function useStaking(): UseStakingReturn {
     setError(null);
 
     try {
-      const recallHeight = BigInt(syncHeight) + BigInt(RECALL_BLOCK_OFFSET);
-
       await send({
-        recipientAddress: opponentId,
-        faucetId: MIDEN_FAUCET_ID,
+        from: sessionWalletId!,
+        to: opponentId,
+        assetId: MIDEN_FAUCET_ID,
         amount: STAKE_AMOUNT,
         noteType: "public",
-        recallHeight,
-      } as Parameters<typeof send>[0]);
+        recallHeight: syncHeight + RECALL_BLOCK_OFFSET,
+      });
 
       setHasStaked(true);
     } catch (err) {
@@ -100,7 +99,7 @@ export function useStaking(): UseStakingReturn {
         err instanceof Error ? err.message : "Failed to send stake.";
       setError(message);
     }
-  }, [hasStaked, opponentId, syncHeight, send]);
+  }, [hasStaked, opponentId, sessionWalletId, syncHeight, send]);
 
   // -----------------------------------------------------------------------
   // Detect and consume opponent's stake note
@@ -114,7 +113,10 @@ export function useStaking(): UseStakingReturn {
 
     (async () => {
       try {
-        await consume(stakeNote.noteId);
+        await consume({
+          accountId: sessionWalletId!,
+          noteIds: [stakeNote.noteId],
+        });
         setOpponentStaked(true);
       } catch (err) {
         consumedStakeRef.current = false;
@@ -123,7 +125,7 @@ export function useStaking(): UseStakingReturn {
         setError(message);
       }
     })();
-  }, [stakeNotes, opponentStaked, consume]);
+  }, [stakeNotes, opponentStaked, sessionWalletId, consume]);
 
   // -----------------------------------------------------------------------
   // withdraw - Send remaining funds back to MidenFi wallet
@@ -159,8 +161,9 @@ export function useStaking(): UseStakingReturn {
       }
 
       await send({
-        recipientAddress: midenFiAddress,
-        faucetId: MIDEN_FAUCET_ID,
+        from: sessionWalletId!,
+        to: midenFiAddress!,
+        assetId: MIDEN_FAUCET_ID,
         amount: withdrawalAmount,
         noteType: "public",
       });

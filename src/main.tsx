@@ -1,39 +1,59 @@
-import React from "react";
+import "./three-extend";
+import { useEffect } from "react";
 import ReactDOM from "react-dom/client";
 import {
-  MidenFiSignerProvider,
+  WalletProvider,
+  MidenWalletAdapter,
   WalletAdapterNetwork,
 } from "@miden-sdk/miden-wallet-adapter";
+import { MidenProvider, useMiden } from "@miden-sdk/react";
 import App from "./App";
 import { useGameStore } from "./store/gameStore";
 import "./index.css";
 
+const wallets = [new MidenWalletAdapter({ appName: "Miden Arena" })];
+
 function MidenApp() {
   return (
-    <MidenFiSignerProvider
-      appName="Miden Arena"
+    <WalletProvider
+      wallets={wallets}
       network={WalletAdapterNetwork.Testnet}
       autoConnect={false}
     >
-      <AppWithInit />
-    </MidenFiSignerProvider>
+      <MidenProvider
+        config={{
+          rpcUrl: "testnet",
+          noteTransportUrl: "https://transport.miden.io",
+          prover: "testnet",
+          autoSyncInterval: 2000,
+        }}
+      >
+        <AppWithInit />
+      </MidenProvider>
+    </WalletProvider>
   );
 }
 
-/** Go straight to title — no WASM init needed at startup. */
+/** Wait for MidenProvider to finish initializing before leaving the loading screen. */
 function AppWithInit() {
   const screen = useGameStore((s) => s.screen);
   const setScreen = useGameStore((s) => s.setScreen);
+  const { isReady, isInitializing, error } = useMiden();
 
-  if (screen === "loading") {
-    setScreen("title");
-  }
+  useEffect(() => {
+    console.log("[AppWithInit] isReady:", isReady, "isInitializing:", isInitializing, "error:", error);
+  }, [isReady, isInitializing, error]);
+
+  useEffect(() => {
+    if (screen === "loading" && isReady) {
+      setScreen("title");
+    }
+  }, [screen, isReady, setScreen]);
 
   return <App />;
 }
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <MidenApp />
-  </React.StrictMode>,
-);
+// Note: React.StrictMode is intentionally omitted. MidenProvider uses a ref-based
+// init guard that doesn't survive StrictMode's double-mount (the second mount
+// sees isInitializedRef=true and skips WASM init entirely).
+ReactDOM.createRoot(document.getElementById("root")!).render(<MidenApp />);

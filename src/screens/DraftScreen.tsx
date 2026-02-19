@@ -1,5 +1,3 @@
-import { Suspense } from "react";
-import { Canvas } from "@react-three/fiber";
 import { motion, AnimatePresence } from "framer-motion";
 import { useGameStore } from "../store/gameStore";
 import { useDraft } from "../hooks/useDraft";
@@ -27,11 +25,7 @@ export default function DraftScreen() {
       <div className="flex h-full flex-col">
         {/* 3D Champion Preview - top 40% on mobile */}
         <div className="relative h-[35vh] w-full sm:h-[40vh]">
-          <Canvas camera={{ position: [0, 1.5, 4], fov: 45 }}>
-            <Suspense fallback={null}>
-              <DraftStage championId={selectedPreview} />
-            </Suspense>
-          </Canvas>
+          <DraftStage championId={selectedPreview} />
 
           {/* Overlay: Draft timeline */}
           <div className="absolute left-0 right-0 top-2 flex justify-center px-4">

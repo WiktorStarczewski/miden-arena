@@ -2,32 +2,34 @@
  * useSessionWallet - Manages MidenFi wallet connection, session wallet creation, and funding.
  *
  * Architecture:
- * - useMidenFiWallet() for wallet detection/connection/funding (1 extension popup)
- * - Standalone WebClient.createClient() for session wallet operations (0 popups)
+ * - useWallet() (from WalletProvider) for extension wallet detection/connection/funding
+ * - useMiden() (from MidenProvider) for the local session client (auto-sync, prover, client)
  *
- * The standalone client uses local keystore mode so the session wallet's keys
- * are stored in IndexedDB and all transactions sign locally. This avoids the
- * external-keystore conflict where MidenProvider routes ALL signing through the
- * MidenFi extension (which doesn't have the session wallet's keys).
+ * The MidenProvider initializes in local keystore mode (no SignerContext above it),
+ * so the session wallet's keys are stored in IndexedDB and all transactions sign locally.
  *
  * Flow:
- *  1. connect() → walletConnect() via MidenFi extension (1 popup)
- *  2. Effect detects walletConnected → creates standalone WebClient + wallet
+ *  1. connect() → select() + connect() via wallet adapter (1 popup)
+ *  2. Effect detects walletConnected → creates session wallet via MidenProvider client
  *  3. Effect requests MidenFi to fund session wallet (1 popup)
- *  4. Effect polls for funding note → consumes via local client → done
+ *  4. Effect polls for funding note → consumes via MidenProvider client → done
  */
 
 import { useState, useEffect, useCallback } from "react";
 import {
-  WebClient,
   AccountStorageMode,
   AuthScheme,
-  TransactionProver,
   AccountId,
-  AccountInterface,
   NetworkId,
+  AccountInterface,
 } from "@miden-sdk/miden-sdk";
-import { useMidenFiWallet } from "@miden-sdk/miden-wallet-adapter";
+import {
+  useWallet,
+  WalletReadyState,
+  PrivateDataPermission,
+  WalletAdapterNetwork,
+} from "@miden-sdk/miden-wallet-adapter";
+import { useMiden } from "@miden-sdk/react";
 import { MIDEN_FAUCET_ID, FUND_AMOUNT } from "../constants/miden";
 import { useGameStore } from "../store/gameStore";
 import {
@@ -44,65 +46,7 @@ import {
 // Constants
 // ---------------------------------------------------------------------------
 
-// RPC goes through Vite proxy (same-origin) to avoid CORS on SubmitProvenTransaction.
-// The WASM client constructs gRPC-web paths like /rpc.Api/SyncState under this base URL.
-const RPC_URL = "http://localhost:5173";
-// Prover has proper CORS headers, so direct is fine.
-const PROVER_URL = "https://tx-prover.testnet.miden.io";
-const CLIENT_STORE_NAME = "miden-arena-session";
-const SYNC_INTERVAL_MS = 2000;
 const CONSUME_POLL_MS = 3000;
-
-// ---------------------------------------------------------------------------
-// Game client singleton — shared with other hooks via getGameClient()
-// ---------------------------------------------------------------------------
-
-let gameClient: WebClient | null = null;
-let syncIntervalId: ReturnType<typeof setInterval> | null = null;
-
-/** Get the standalone game client for use in other hooks. */
-export function getGameClient(): WebClient | null {
-  return gameClient;
-}
-
-function startSyncInterval(client: WebClient) {
-  if (syncIntervalId) clearInterval(syncIntervalId);
-  syncIntervalId = setInterval(async () => {
-    try {
-      await client.syncState();
-    } catch {
-      /* non-fatal */
-    }
-  }, SYNC_INTERVAL_MS);
-}
-
-/** Delete the IndexedDB databases used by the WASM client to clear stale data. */
-async function deleteStaleStores(): Promise<void> {
-  const dbs = await indexedDB.databases();
-  for (const db of dbs) {
-    if (db.name && db.name.includes(CLIENT_STORE_NAME)) {
-      console.log("[useSessionWallet] Deleting stale IndexedDB:", db.name);
-      indexedDB.deleteDatabase(db.name);
-    }
-  }
-}
-
-async function createGameClient(fresh = false): Promise<WebClient> {
-  if (gameClient && !fresh) return gameClient;
-  if (fresh) {
-    gameClient = null;
-    await deleteStaleStores();
-  }
-  console.log("[useSessionWallet] Creating standalone game client...");
-  const client = await WebClient.createClient(
-    RPC_URL,
-    undefined, // noteTransportUrl — not needed for public notes
-    undefined, // seed
-    CLIENT_STORE_NAME,
-  );
-  gameClient = client;
-  return client;
-}
 
 // ---------------------------------------------------------------------------
 // Hook return type
@@ -151,49 +95,43 @@ export function useSessionWallet(): UseSessionWalletReturn {
 
   const [error, setError] = useState<string | null>(null);
 
-  // MidenFi wallet adapter — only for connection + funding (extension popups)
+  // MidenProvider — local session client
+  const { client, isReady: clientReady, prover, runExclusive } = useMiden();
+
+  // Wallet adapter — extension wallet
   const {
+    select,
     connect: walletConnect,
     address: walletAddress,
     connected: walletConnected,
     requestSend,
     wallets,
-  } = useMidenFiWallet();
+  } = useWallet();
+
+  // Extension detected when first wallet adapter is installed
+  const isExtensionDetected =
+    wallets.length > 0 && wallets[0].readyState === WalletReadyState.Installed;
 
   // -----------------------------------------------------------------------
   // Restore persisted session on fresh page load
   // -----------------------------------------------------------------------
   useEffect(() => {
     if (setupStep !== "idle") return;
+    if (!clientReady) return;
 
     if (isSetupComplete()) {
       const savedAddress = getMidenFiAddress();
       const savedWalletId = getSessionWalletId();
       if (savedAddress && savedWalletId) {
-        let cancelled = false;
-        // Recreate game client — IndexedDB still has the wallet + keys
-        createGameClient()
-          .then(async (client) => {
-            if (cancelled) return;
-            await client.syncState();
-            if (cancelled) return;
-            startSyncInterval(client);
-            setMidenFiAddress(savedAddress);
-            setSessionWalletId(savedWalletId);
-            setSetupStep("done");
-          })
-          .catch((err) => {
-            if (cancelled) return;
-            console.error("[useSessionWallet] Restore failed:", err);
-            clearSessionData();
-          });
-        return () => {
-          cancelled = true;
-        };
+        // MidenProvider already initialized the client; just restore store state
+        setMidenFiAddress(savedAddress);
+        setSessionWalletId(savedWalletId);
+        setSetupStep("done");
+        return;
       }
     }
     clearSessionData();
-  }, [setupStep, setMidenFiAddress, setSessionWalletId, setSetupStep]);
+  }, [setupStep, clientReady, setMidenFiAddress, setSessionWalletId, setSetupStep]);
 
   // -----------------------------------------------------------------------
   // "connecting" → detect wallet connected → advance to "creatingWallet"
@@ -209,29 +147,18 @@ export function useSessionWallet(): UseSessionWalletReturn {
   }, [setupStep, walletConnected, walletAddress, setMidenFiAddress, setSetupStep]);
 
   // -----------------------------------------------------------------------
-  // "creatingWallet" → create standalone game client + wallet → "funding"
+  // "creatingWallet" → create wallet via MidenProvider client → "funding"
   // -----------------------------------------------------------------------
   useEffect(() => {
     if (setupStep !== "creatingWallet") return;
+    if (!client || !clientReady) return;
 
     // If we already have a session wallet (remount mid-flow), skip creation
     const existing = getSessionWalletId();
     if (existing) {
-      let cancelled = false;
-      createGameClient()
-        .then(async (client) => {
-          if (cancelled) return;
-          await client.syncState();
-          startSyncInterval(client);
-          setSessionWalletId(existing);
-          setSetupStep("funding");
-        })
-        .catch((err) => {
-          if (!cancelled) resetOnError(err, setError, setSetupStep, "restoreClient");
-        });
-      return () => {
-        cancelled = true;
-      };
+      setSessionWalletId(existing);
+      setSetupStep("funding");
+      return;
     }
 
     let cancelled = false;
@@ -239,13 +166,6 @@ export function useSessionWallet(): UseSessionWalletReturn {
 
     (async () => {
       try {
-        // fresh=true: wipe stale IndexedDB from previous sessions
-        const client = await createGameClient(true);
-        if (cancelled) return;
-
-        await client.syncState();
-        if (cancelled) return;
-
         const wallet = await client.newWallet(
           AccountStorageMode.private(),
           true,
@@ -258,7 +178,6 @@ export function useSessionWallet(): UseSessionWalletReturn {
           .toBech32(NetworkId.testnet(), AccountInterface.BasicWallet);
         console.log("[useSessionWallet] Session wallet created:", walletIdStr);
 
-        startSyncInterval(client);
         saveSessionWalletId(walletIdStr);
         setSessionWalletId(walletIdStr);
         setSetupStep("funding");
@@ -270,7 +189,7 @@ export function useSessionWallet(): UseSessionWalletReturn {
     return () => {
       cancelled = true;
     };
-  }, [setupStep, setSessionWalletId, setSetupStep]);
+  }, [setupStep, client, clientReady, setSessionWalletId, setSetupStep]);
 
   // -----------------------------------------------------------------------
   // "funding" → request MidenFi to send funds → advance to "consuming"
@@ -321,46 +240,51 @@ export function useSessionWallet(): UseSessionWalletReturn {
   // -----------------------------------------------------------------------
   useEffect(() => {
     if (setupStep !== "consuming") return;
-    if (!gameClient) return;
+    if (!client || !prover) return;
 
     const walletId = getSessionWalletId();
     if (!walletId) return;
 
     let cancelled = false;
-    const client = gameClient;
     console.log("[useSessionWallet] Polling for funding note...");
 
     const pollAndConsume = async () => {
       while (!cancelled) {
         try {
-          await client.syncState();
+          // Run sync + check + consume inside a single runExclusive block so
+          // we never race with MidenProvider's auto-sync timer.
+          const found = await runExclusive(async () => {
+            const summary = await client.syncState();
+            console.log("[useSessionWallet] Synced to block", summary.blockNum());
 
-          // Create fresh AccountId each iteration — WASM pointers are consumed
-          // when serialized to the web worker, so they can't be reused.
-          const accountId = AccountId.fromBech32(walletId);
+            // Create fresh AccountId each iteration — WASM pointers are consumed
+            // when serialized to the web worker, so they can't be reused.
+            const accountId = AccountId.fromBech32(walletId);
 
-          // Only get notes consumable by OUR session wallet (avoids P2ID mismatch
-          // with stale notes from previous sessions targeting different account IDs)
-          const consumable = await client.getConsumableNotes(accountId);
+            // Only get notes consumable by OUR session wallet (avoids P2ID mismatch
+            // with stale notes from previous sessions targeting different account IDs)
+            const consumable = await client.getConsumableNotes(accountId);
 
-          if (consumable.length > 0) {
-            console.log(
-              "[useSessionWallet] Found",
-              consumable.length,
-              "consumable note(s) for account. Consuming...",
-            );
-            const notes = consumable.map((r) => r.inputNoteRecord().toNote());
-            const txRequest = client.newConsumeTransactionRequest(notes);
-            // Fresh accountId + prover for the submit call (WASM pointer consumed above)
-            const submitAccountId = AccountId.fromBech32(walletId);
-            const prover = TransactionProver.newRemoteProver(PROVER_URL);
-            await client.submitNewTransactionWithProver(submitAccountId, txRequest, prover);
-
-            if (!cancelled) {
-              console.log("[useSessionWallet] Funding note consumed. Setup complete!");
-              markSetupComplete();
-              setSetupStep("done");
+            if (consumable.length > 0) {
+              console.log(
+                "[useSessionWallet] Found",
+                consumable.length,
+                "consumable note(s) for account. Consuming...",
+              );
+              const notes = consumable.map((r) => r.inputNoteRecord().toNote());
+              const txRequest = client.newConsumeTransactionRequest(notes);
+              // Fresh accountId for the submit call (WASM pointer consumed above)
+              const submitAccountId = AccountId.fromBech32(walletId);
+              await client.submitNewTransactionWithProver(submitAccountId, txRequest, prover);
+              return true;
             }
+            return false;
+          });
+
+          if (found && !cancelled) {
+            console.log("[useSessionWallet] Funding note consumed. Setup complete!");
+            markSetupComplete();
+            setSetupStep("done");
             return;
           }
 
@@ -377,7 +301,7 @@ export function useSessionWallet(): UseSessionWalletReturn {
     return () => {
       cancelled = true;
     };
-  }, [setupStep, setSetupStep]);
+  }, [setupStep, client, prover, runExclusive, setSetupStep]);
 
   // -----------------------------------------------------------------------
   // connect — button handler
@@ -387,7 +311,10 @@ export function useSessionWallet(): UseSessionWalletReturn {
     clearSessionData();
     try {
       setSetupStep("connecting");
-      await walletConnect();
+      if (wallets.length > 0) {
+        select(wallets[0].adapter.name);
+      }
+      await walletConnect(PrivateDataPermission.UponRequest, WalletAdapterNetwork.Testnet);
     } catch (err) {
       console.error("[useSessionWallet] walletConnect error:", err);
       const msg = err instanceof Error ? err.message : String(err);
@@ -395,11 +322,11 @@ export function useSessionWallet(): UseSessionWalletReturn {
       clearSessionData();
       setSetupStep("idle");
     }
-  }, [walletConnect, setSetupStep]);
+  }, [walletConnect, select, wallets, setSetupStep]);
 
   return {
     connect,
-    isExtensionDetected: wallets.length > 0,
+    isExtensionDetected,
     isConnected: midenFiAddress !== null,
     isReady: setupStep === "done",
     step: setupStep,

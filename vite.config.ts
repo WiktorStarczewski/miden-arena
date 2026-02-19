@@ -1,9 +1,28 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import path from "path";
 
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    alias: {
+      // Deduplicate: force the symlinked react-sdk to use the app's
+      // single copy of miden-sdk so WASM class identity checks pass.
+      "@miden-sdk/miden-sdk": path.resolve(
+        __dirname,
+        "node_modules/@miden-sdk/miden-sdk"
+      ),
+    },
+  },
   server: {
+    fs: {
+      allow: [
+        // Project root
+        ".",
+        // Local react-sdk symlink target
+        "../miden-client",
+      ],
+    },
     headers: {
       "Cross-Origin-Opener-Policy": "same-origin",
       "Cross-Origin-Embedder-Policy": "require-corp",

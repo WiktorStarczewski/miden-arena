@@ -14,7 +14,7 @@
   "dependencies": {
     "@miden-sdk/miden-sdk": "^0.13.0",
     "@miden-sdk/miden-wallet-adapter": "^0.13.2",
-    "@miden-sdk/react": "^0.13.0",
+    "@miden-sdk/react": "file:../miden-client/packages/react-sdk",
     "@react-spring/web": "^9.7.0",
     "@react-three/drei": "^10.0.0",
     "@react-three/fiber": "^9.0.0",
