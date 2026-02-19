@@ -24,8 +24,6 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { useTransaction, useSyncState } from "@miden-sdk/react";
 import {
   AccountId,
-  Felt,
-  FeltArray,
   FungibleAsset,
   Note,
   NoteAssets,
@@ -36,6 +34,7 @@ import {
   OutputNote,
   OutputNoteArray,
   TransactionRequestBuilder,
+  Word,
 } from "@miden-sdk/miden-sdk";
 import type { InputNoteRecord } from "@miden-sdk/miden-sdk";
 import { useGameStore } from "../store/gameStore";
@@ -85,7 +84,7 @@ function parseId(id: string): AccountId {
   }
 }
 
-/** Build and send a single P2ID note with a FeltArray attachment. */
+/** Build and send a single P2ID note with a Word attachment (4 felts). */
 async function sendAttachmentNote(
   execute: ReturnType<typeof useTransaction>["execute"],
   senderId: string,
@@ -96,9 +95,14 @@ async function sendAttachmentNote(
   const target = parseId(targetId);
   const faucet = parseId(MIDEN_FAUCET_ID);
 
-  const elements = new FeltArray(feltValues.map((v) => new Felt(v)));
+  // Pad to exactly 4 elements for a Word attachment.
+  // Word attachments don't require advice map entries (unlike Array),
+  // which avoids a bug in miden-standards 0.13.x.
+  const padded = [...feltValues];
+  while (padded.length < 4) padded.push(0n);
+  const word = new Word(BigUint64Array.from(padded));
   const scheme = NoteAttachmentScheme.none();
-  const attachment = NoteAttachment.newArray(scheme, elements);
+  const attachment = NoteAttachment.newWord(scheme, word);
 
   const note = Note.createP2IDNote(
     sender,
@@ -117,14 +121,28 @@ async function sendAttachmentNote(
 
 /**
  * Try to read the attachment from an InputNoteRecord.
- * Returns the FeltArray if the note has an Array attachment, or null.
+ * Returns felt values as bigint[] if the note has a Word or Array attachment, or null.
  */
-function readAttachment(record: InputNoteRecord): FeltArray | null {
+function readAttachment(record: InputNoteRecord): bigint[] | null {
   const meta = record.metadata();
   if (!meta) return null;
   const att = meta.attachment();
   if (att.attachmentKind() === NoteAttachmentKind.None) return null;
-  return att.asArray() ?? null;
+
+  // Word attachment (our current format)
+  const word = att.asWord();
+  if (word) {
+    const u64s = word.toU64s();
+    return [u64s[0], u64s[1], u64s[2], u64s[3]];
+  }
+
+  // Array attachment (legacy fallback)
+  const arr = att.asArray();
+  if (arr) {
+    return Array.from({ length: arr.length() }, (_, i) => arr.get(i).asInt());
+  }
+
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -314,13 +332,13 @@ export function useCommitReveal(): UseCommitRevealReturn {
       if (handledNoteIds.current.has(noteId)) continue;
 
       const felts = readAttachment(record);
-      if (!felts || felts.length() < 3) continue;
+      if (!felts || felts.length < 3) continue;
 
-      const msgType = felts.get(0).asInt();
+      const msgType = felts[0];
       if (msgType !== MSG_TYPE_COMMIT) continue;
 
-      const rawPart1 = felts.get(1).asInt();
-      const rawPart2 = felts.get(2).asInt();
+      const rawPart1 = felts[1];
+      const rawPart2 = felts[2];
 
       handledNoteIds.current.add(noteId);
 
@@ -350,14 +368,14 @@ export function useCommitReveal(): UseCommitRevealReturn {
       if (handledNoteIds.current.has(noteId)) continue;
 
       const felts = readAttachment(record);
-      if (!felts || felts.length() < 4) continue;
+      if (!felts || felts.length < 4) continue;
 
-      const msgType = felts.get(0).asInt();
+      const msgType = felts[0];
       if (msgType !== MSG_TYPE_REVEAL) continue;
 
-      const oppMove = Number(felts.get(1).asInt());
-      const noncePart1 = felts.get(2).asInt();
-      const noncePart2 = felts.get(3).asInt();
+      const oppMove = Number(felts[1]);
+      const noncePart1 = felts[2];
+      const noncePart2 = felts[3];
 
       handledNoteIds.current.add(noteId);
 

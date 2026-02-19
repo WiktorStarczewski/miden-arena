@@ -37,22 +37,22 @@ describe("isTeamEliminated", () => {
 
 describe("resolveTurn", () => {
   it("faster champion attacks first", () => {
-    // Gale (SPD 18) vs Boulder (SPD 5)
-    const myChamps = [initChampionState(3)]; // Gale
-    const oppChamps = [initChampionState(2)]; // Boulder
+    // Gale (id 4, SPD 18) vs Boulder (id 1, SPD 5)
+    const myChamps = [initChampionState(4)]; // Gale
+    const oppChamps = [initChampionState(1)]; // Boulder
 
     const { events } = resolveTurn(
       myChamps,
       oppChamps,
-      { championId: 3, abilityIndex: 0 }, // Wind Blade (24 dmg)
-      { championId: 2, abilityIndex: 0 }, // Rock Slam (28 dmg)
+      { championId: 4, abilityIndex: 0 }, // Wind Blade (24 dmg)
+      { championId: 1, abilityIndex: 0 }, // Rock Slam (28 dmg)
     );
 
     // Gale is faster, so should attack first
     const firstAttack = events.find((e) => e.type === "attack");
     expect(firstAttack).toBeDefined();
     if (firstAttack?.type === "attack") {
-      expect(firstAttack.attackerId).toBe(3); // Gale attacks first
+      expect(firstAttack.attackerId).toBe(4); // Gale attacks first
     }
   });
 
@@ -74,39 +74,39 @@ describe("resolveTurn", () => {
   });
 
   it("applies heal correctly", () => {
-    const myChamps = [initChampionState(1)]; // Torrent
+    const myChamps = [initChampionState(3)]; // Torrent (id 3, Water)
     myChamps[0].currentHp = 50; // Damage them first
-    const oppChamps = [initChampionState(0)]; // Ember
+    const oppChamps = [initChampionState(2)]; // Ember (id 2, Fire)
 
     const { myChampions } = resolveTurn(
       myChamps,
       oppChamps,
-      { championId: 1, abilityIndex: 1 }, // Heal (+25 HP)
-      { championId: 0, abilityIndex: 0 }, // Fireball
+      { championId: 3, abilityIndex: 1 }, // Heal (+25 HP)
+      { championId: 2, abilityIndex: 0 }, // Fireball
     );
 
     // Torrent should have healed (but also taken damage)
     // Hard to predict exact value due to speed ordering, but HP should be valid
-    const torrent = myChampions.find((c) => c.id === 1)!;
+    const torrent = myChampions.find((c) => c.id === 3)!;
     expect(torrent.currentHp).toBeGreaterThanOrEqual(0);
     expect(torrent.currentHp).toBeLessThanOrEqual(torrent.maxHp);
   });
 
   it("applies buff correctly", () => {
-    const myChamps = [initChampionState(0)]; // Ember
-    const oppChamps = [initChampionState(1)]; // Torrent
+    const myChamps = [initChampionState(2)]; // Ember (id 2, Fire)
+    const oppChamps = [initChampionState(3)]; // Torrent (id 3, Water)
 
     const { myChampions, events } = resolveTurn(
       myChamps,
       oppChamps,
-      { championId: 0, abilityIndex: 1 }, // Flame Shield (+5 DEF, 2 turns)
-      { championId: 1, abilityIndex: 0 }, // Tidal Wave
+      { championId: 2, abilityIndex: 1 }, // Flame Shield (+5 DEF, 2 turns)
+      { championId: 3, abilityIndex: 0 }, // Tidal Wave
     );
 
     const buffEvent = events.find((e) => e.type === "buff");
     expect(buffEvent).toBeDefined();
 
-    const ember = myChampions.find((c) => c.id === 0)!;
+    const ember = myChampions.find((c) => c.id === 2)!;
     // Buff should have been applied, but then ticked down by 1
     // So should have 1 turn remaining
     expect(ember.buffs.length).toBe(1);
@@ -116,14 +116,14 @@ describe("resolveTurn", () => {
   });
 
   it("applies burn correctly", () => {
-    const myChamps = [initChampionState(4)]; // Inferno
-    const oppChamps = [initChampionState(2)]; // Boulder
+    const myChamps = [initChampionState(0)]; // Inferno (id 0, Fire)
+    const oppChamps = [initChampionState(1)]; // Boulder (id 1, Earth)
 
     const { opponentChampions, events } = resolveTurn(
       myChamps,
       oppChamps,
-      { championId: 4, abilityIndex: 1 }, // Scorch (15 dmg + burn 3 turns)
-      { championId: 2, abilityIndex: 0 }, // Rock Slam
+      { championId: 0, abilityIndex: 1 }, // Scorch (15 dmg + burn 3 turns)
+      { championId: 1, abilityIndex: 0 }, // Rock Slam
     );
 
     const burnApplied = events.find((e) => e.type === "burn_applied");
@@ -133,15 +133,15 @@ describe("resolveTurn", () => {
     expect(burnApplied).toBeDefined();
     expect(burnTick).toBeDefined();
 
-    const boulder = opponentChampions.find((c) => c.id === 2)!;
+    const boulder = opponentChampions.find((c) => c.id === 1)!;
     // Burn should have 2 turns left (3 applied, 1 ticked)
     expect(boulder.burnTurns).toBe(2);
   });
 
   it("KO prevents second attack", () => {
-    // Phoenix (ATK 22, SPD 17) using Blaze (38 power) vs Gale (HP 75, DEF 6)
+    // Phoenix (id 8, ATK 22, SPD 17) using Blaze (38 power) vs Gale (id 4, HP 75, DEF 6)
     const myChamps = [initChampionState(8)]; // Phoenix
-    const oppChamps = [initChampionState(3)]; // Gale
+    const oppChamps = [initChampionState(4)]; // Gale
 
     // Reduce Gale's HP to make KO likely
     oppChamps[0].currentHp = 10;
@@ -150,7 +150,7 @@ describe("resolveTurn", () => {
       myChamps,
       oppChamps,
       { championId: 8, abilityIndex: 0 }, // Blaze (38 power)
-      { championId: 3, abilityIndex: 0 }, // Wind Blade
+      { championId: 4, abilityIndex: 0 }, // Wind Blade
     );
 
     const koEvent = events.find((e) => e.type === "ko");
@@ -165,21 +165,21 @@ describe("resolveTurn", () => {
   });
 
   it("applies debuff to opponent", () => {
-    const myChamps = [initChampionState(5)]; // Tide
-    const oppChamps = [initChampionState(0)]; // Ember
+    const myChamps = [initChampionState(5)]; // Tide (id 5, Water)
+    const oppChamps = [initChampionState(0)]; // Inferno (id 0, Fire)
 
     const { opponentChampions, events } = resolveTurn(
       myChamps,
       oppChamps,
       { championId: 5, abilityIndex: 1 }, // Mist (-4 opp ATK, 2 turns)
-      { championId: 0, abilityIndex: 0 }, // Fireball
+      { championId: 0, abilityIndex: 0 }, // Eruption
     );
 
     const debuffEvent = events.find((e) => e.type === "debuff");
     expect(debuffEvent).toBeDefined();
 
-    const ember = opponentChampions.find((c) => c.id === 0)!;
-    const atkDebuff = ember.buffs.find((b) => b.type === "attack" && b.isDebuff);
+    const inferno = opponentChampions.find((c) => c.id === 0)!;
+    const atkDebuff = inferno.buffs.find((b) => b.type === "attack" && b.isDebuff);
     expect(atkDebuff).toBeDefined();
   });
 });
