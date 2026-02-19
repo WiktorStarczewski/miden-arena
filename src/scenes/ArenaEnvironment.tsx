@@ -11,9 +11,6 @@ import {
   PointsMaterial,
   Points,
   AdditiveBlending,
-  Mesh,
-  MeshBasicMaterial,
-  DoubleSide,
 } from "three";
 
 // TYPES
@@ -249,88 +246,6 @@ const FireflySparkles = React.memo(function FireflySparkles({
   return <points ref={pointsRef} geometry={geometry} material={material} />;
 });
 
-// GROUND MIST (fog particles near the edges of the arena)
-// ================================================================================================
-
-const GroundMist = React.memo(function GroundMist({
-  count,
-}: {
-  count: number;
-}) {
-  const mistData = useMemo(() => {
-    return Array.from({ length: count }, () => ({
-      x: (Math.random() - 0.5) * 14,
-      z: (Math.random() - 0.5) * 10,
-      scale: 0.5 + Math.random() * 1.5,
-      phase: Math.random() * Math.PI * 2,
-      driftSpeed: 0.1 + Math.random() * 0.3,
-    }));
-  }, [count]);
-
-  return (
-    <group>
-      {mistData.map((mist, i) => (
-        <MistPatch
-          key={i}
-          x={mist.x}
-          z={mist.z}
-          scale={mist.scale}
-          phase={mist.phase}
-          driftSpeed={mist.driftSpeed}
-        />
-      ))}
-    </group>
-  );
-});
-
-// Individual mist patch that animates independently
-const MistPatch = React.memo(function MistPatch({
-  x,
-  z,
-  scale,
-  phase,
-  driftSpeed,
-}: {
-  x: number;
-  z: number;
-  scale: number;
-  phase: number;
-  driftSpeed: number;
-}) {
-  const meshRef = useRef<Mesh>(null);
-
-  useFrame(() => {
-    if (!meshRef.current) return;
-    const time = Date.now() * 0.001;
-    const opacity = 0.04 + Math.sin(time * driftSpeed + phase) * 0.02;
-    const mat = meshRef.current.material as MeshBasicMaterial;
-    mat.opacity = Math.max(0, opacity);
-
-    meshRef.current.position.x =
-      x + Math.sin(time * driftSpeed * 0.5 + phase) * 0.5;
-    meshRef.current.position.z =
-      z + Math.cos(time * driftSpeed * 0.3 + phase) * 0.3;
-  });
-
-  return (
-    <mesh
-      ref={meshRef}
-      position={[x, 0.05, z]}
-      rotation={[-Math.PI / 2, 0, 0]}
-      scale={scale}
-    >
-      <circleGeometry args={[1, 16]} />
-      <meshBasicMaterial
-        color="#8080a0"
-        transparent
-        opacity={0.04}
-        side={DoubleSide}
-        depthWrite={false}
-      />
-    </mesh>
-  );
-});
-
 // GROUND PLANE
 // ================================================================================================
 
@@ -371,7 +286,7 @@ const ArenaGround = React.memo(function ArenaGround({
         />
       </mesh>
 
-      {/* Arena boundary markers - four corner pillars */}
+      {/* Arena boundary markers - glowing crystal columns */}
       {(
         [
           [-4, 0, -3],
@@ -380,16 +295,30 @@ const ArenaGround = React.memo(function ArenaGround({
           [4, 0, 3],
         ] as [number, number, number][]
       ).map((pos, i) => (
-        <mesh key={i} position={pos} castShadow>
-          <cylinderGeometry args={[0.15, 0.2, 1.5, 8]} />
-          <meshToonMaterial
+        <mesh key={i} position={[pos[0], pos[1] + 1.25, pos[2]]} castShadow>
+          <cylinderGeometry args={[0.12, 0.18, 2.5, 8]} />
+          <meshStandardMaterial
             color="#3a3a4a"
-            gradientMap={gradientMap}
             emissive={new Color("#6644aa")}
-            emissiveIntensity={0.15}
+            emissiveIntensity={0.6}
+            roughness={0.4}
+            metalness={0.2}
           />
         </mesh>
       ))}
+
+      {/* Arena floor ring */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
+        <ringGeometry args={[3.5, 4, 64]} />
+        <meshStandardMaterial
+          color="#6644aa"
+          emissive={new Color("#6644aa")}
+          emissiveIntensity={0.4}
+          transparent
+          opacity={0.15}
+          depthWrite={false}
+        />
+      </mesh>
 
       {/* Center line indicator */}
       <mesh
@@ -467,10 +396,10 @@ const ArenaLighting = React.memo(function ArenaLighting({
 // ================================================================================================
 
 const PILLAR_POSITIONS: [number, number, number][] = [
-  [-4, 0.75, -3],
-  [4, 0.75, -3],
-  [-4, 0.75, 3],
-  [4, 0.75, 3],
+  [-4, 2.5, -3],
+  [4, 2.5, -3],
+  [-4, 2.5, 3],
+  [4, 2.5, 3],
 ];
 
 const PillarGlows = React.memo(function PillarGlows() {
@@ -489,8 +418,8 @@ const PillarGlows = React.memo(function PillarGlows() {
           />
           <pointLight
             color="#6644aa"
-            intensity={0.15}
-            distance={2}
+            intensity={0.4}
+            distance={3}
             decay={2}
           />
         </group>
@@ -504,8 +433,8 @@ const PillarGlows = React.memo(function PillarGlows() {
 
 const ArenaEnvironment = React.memo(function ArenaEnvironment({
   fogColor = "#1a1a2e",
-  fogNear = 8,
-  fogFar = 25,
+  fogNear = 12,
+  fogFar = 40,
   groundColor = "#2a2a3a",
   ambientIntensity = 0.35,
   performanceScale = 1.0,
@@ -513,18 +442,14 @@ const ArenaEnvironment = React.memo(function ArenaEnvironment({
   const dustCount = Math.round(80 * performanceScale);
   const wispCount = Math.round(20 * performanceScale);
   const fireflyCount = Math.round(15 * performanceScale);
-  const mistCount = Math.round(12 * performanceScale);
 
   return (
     <>
       {/* Fog for atmospheric depth */}
       <fog attach="fog" args={[fogColor, fogNear, fogFar]} />
 
-      {/* Background color */}
-      <color attach="background" args={[fogColor]} />
-
-      {/* Environment map for subtle reflections */}
-      <Environment preset="night" />
+      {/* Night sky backdrop + environment map for reflections */}
+      <Environment preset="night" background />
 
       {/* Lighting */}
       <ArenaLighting ambientIntensity={ambientIntensity} />
@@ -552,9 +477,6 @@ const ArenaEnvironment = React.memo(function ArenaEnvironment({
 
       {/* Firefly-like sparkles in the background */}
       <FireflySparkles count={fireflyCount} />
-
-      {/* Ground-level mist near the edges */}
-      <GroundMist count={mistCount} />
 
       {/* Pillar glow effects */}
       <PillarGlows />
