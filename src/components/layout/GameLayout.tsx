@@ -1,4 +1,7 @@
 import React from "react";
+import { useAccount } from "@miden-sdk/react";
+import { useGameStore } from "../../store/gameStore";
+import { formatMiden } from "../../utils/formatting";
 import GlassPanel from "./GlassPanel";
 
 interface GameLayoutProps {
@@ -6,6 +9,22 @@ interface GameLayoutProps {
   title?: string;
   showBackButton?: boolean;
   onBack?: () => void;
+}
+
+function BalanceDisplay() {
+  const sessionWalletId = useGameStore((s) => s.setup.sessionWalletId);
+  const { assets, isLoading } = useAccount(sessionWalletId ?? undefined);
+
+  if (!sessionWalletId) return null;
+
+  // Sum all fungible asset balances (session wallet should only hold MIDEN)
+  const totalBalance = assets.reduce((sum, a) => sum + a.amount, 0n);
+
+  return (
+    <span className="text-xs font-medium text-amber-400/80">
+      {isLoading ? "..." : formatMiden(totalBalance).slice(0, formatMiden(totalBalance).indexOf('.') + 3)} MIDEN
+    </span>
+  );
 }
 
 export default function GameLayout({
@@ -51,8 +70,9 @@ export default function GameLayout({
             )}
           </div>
 
-          {/* Sync status indicator */}
-          <div className="flex items-center gap-2">
+          {/* Balance + Sync status */}
+          <div className="flex items-center gap-3">
+            <BalanceDisplay />
             <span className="text-xs text-white/40">Miden Arena</span>
             <div className="relative flex items-center justify-center w-3 h-3">
               <div className="absolute w-3 h-3 rounded-full bg-emerald-400/30 animate-ping" />

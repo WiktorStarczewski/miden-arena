@@ -11,13 +11,6 @@ const ELEMENTS = [
   { id: "wind", label: "Wind", color: "#aed581", icon: "🌪️" },
 ] as const;
 
-// Advantage cycle order for vertical display: Fire → Earth → Wind → Water (→ Fire)
-const CYCLE = [
-  ELEMENTS[0], // Fire
-  ELEMENTS[3], // Earth  (Fire beats Earth)
-  ELEMENTS[2], // Wind   (Earth beats Wind... wait)
-] as const;
-
 // Advantage cycle: Fire → Earth → Wind → Water → Fire
 // Layout: Fire (top), Earth (right), Water (bottom), Wind (left)
 // Arrows go clockwise for the "beats" direction
