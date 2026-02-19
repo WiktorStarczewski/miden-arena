@@ -46,12 +46,23 @@ interface ChampionState {
 interface AttackState {
   from: "left" | "right";
   element: string;
+  /** Unique key to force remount between sequential attacks */
+  key?: number;
+}
+
+interface SelfEffectState {
+  side: "left" | "right";
+  type: "buff" | "heal";
+  element: string;
+  key?: number;
 }
 
 interface ArenaSceneProps {
   myChampion?: ChampionState;
   opponentChampion?: ChampionState;
   attackEffect?: AttackState;
+  /** Buff / heal glow effect on the casting champion */
+  selfEffect?: SelfEffectState;
   onAttackComplete?: () => void;
   /** Set to "left" or "right" to trigger a KO explosion at that position */
   koTarget?: "left" | "right" | null;
@@ -479,6 +490,93 @@ const VictoryCelebration = React.memo(function VictoryCelebration({
   );
 });
 
+// SELF EFFECT (buff / heal glow around the casting champion)
+// ================================================================================================
+
+const SELF_EFFECT_DURATION = 1.0;
+
+const SELF_EFFECT_COLORS: Record<string, { primary: string; secondary: string }> = {
+  heal: { primary: "#4ade80", secondary: "#86efac" },
+  buff: { primary: "#fbbf24", secondary: "#fde68a" },
+};
+
+const SelfEffect = React.memo(function SelfEffect({
+  position,
+  type,
+}: {
+  position: [number, number, number];
+  type: "buff" | "heal";
+}) {
+  const ringRef = useRef<Mesh>(null);
+  const progressRef = useRef(0);
+  const [visible, setVisible] = useState(true);
+
+  const colors = SELF_EFFECT_COLORS[type] ?? SELF_EFFECT_COLORS.buff;
+
+  useFrame((_, delta) => {
+    if (!visible) return;
+    progressRef.current += delta / SELF_EFFECT_DURATION;
+    if (progressRef.current >= 1) {
+      setVisible(false);
+      return;
+    }
+
+    if (ringRef.current) {
+      const scale = progressRef.current * 2.5;
+      ringRef.current.scale.set(scale, scale, 1);
+      const mat = ringRef.current.material as MeshBasicMaterial;
+      mat.opacity = Math.max(0, (1 - progressRef.current) * 0.5);
+    }
+  });
+
+  if (!visible) return null;
+
+  return (
+    <group position={position}>
+      {/* Expanding ring on the ground */}
+      <mesh ref={ringRef} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.5, 0.7, 32]} />
+        <meshBasicMaterial
+          color={colors.primary}
+          transparent
+          opacity={0.5}
+          side={DoubleSide}
+          blending={AdditiveBlending}
+          depthWrite={false}
+        />
+      </mesh>
+
+      {/* Rising sparkles */}
+      <Sparkles
+        count={30}
+        speed={3}
+        size={4}
+        color={colors.primary}
+        scale={[1.5, 2.5, 1.5]}
+        opacity={0.8}
+        noise={2}
+      />
+      <Sparkles
+        count={20}
+        speed={2}
+        size={3}
+        color={colors.secondary}
+        scale={[2, 3, 2]}
+        opacity={0.5}
+        noise={1}
+      />
+
+      {/* Glow light */}
+      <pointLight
+        color={colors.primary}
+        intensity={3}
+        distance={4}
+        decay={2}
+      />
+    </group>
+  );
+});
+
 // SCENE CONTENT (rendered inside Canvas)
 // ================================================================================================
 
@@ -486,6 +584,7 @@ const SceneContent = React.memo(function SceneContent({
   myChampion,
   opponentChampion,
   attackEffect,
+  selfEffect,
   onAttackComplete,
   hitFlash,
   koTarget,
@@ -515,6 +614,13 @@ const SceneContent = React.memo(function SceneContent({
     const pos = attackEffect.from === "left" ? RIGHT_POSITION : LEFT_POSITION;
     return [pos[0], pos[1] + 1, pos[2]] as [number, number, number];
   }, [attackEffect]);
+
+  // Self effect position (buff/heal glow at the caster)
+  const selfPosition = useMemo((): [number, number, number] | null => {
+    if (!selfEffect) return null;
+    const pos = selfEffect.side === "left" ? LEFT_POSITION : RIGHT_POSITION;
+    return [pos[0], pos[1] + 0.5, pos[2]];
+  }, [selfEffect]);
 
   // KO explosion position
   const koPosition = useMemo((): [number, number, number] | null => {
@@ -586,13 +692,23 @@ const SceneContent = React.memo(function SceneContent({
         </>
       )}
 
-      {/* Attack effect */}
+      {/* Attack effect (projectile from attacker to defender) */}
       {attackEffect && attackFrom && attackTo && (
         <AttackEffect
+          key={attackEffect.key ?? 0}
           from={attackFrom}
           to={attackTo}
           element={attackEffect.element}
           onComplete={onAttackComplete}
+        />
+      )}
+
+      {/* Self effect (buff / heal glow on caster) */}
+      {selfEffect && selfPosition && (
+        <SelfEffect
+          key={selfEffect.key ?? 0}
+          position={selfPosition}
+          type={selfEffect.type}
         />
       )}
 
@@ -621,6 +737,7 @@ const ArenaScene = React.memo(function ArenaScene({
   myChampion,
   opponentChampion,
   attackEffect,
+  selfEffect,
   onAttackComplete,
   koTarget,
   showVictory,
@@ -679,6 +796,7 @@ const ArenaScene = React.memo(function ArenaScene({
             myChampion={myChampion}
             opponentChampion={opponentChampion}
             attackEffect={attackEffect}
+            selfEffect={selfEffect}
             onAttackComplete={handleAttackComplete}
             hitFlash={hitFlash}
             koTarget={koTarget}

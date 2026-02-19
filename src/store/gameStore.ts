@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type { ChampionState, CommitData, RevealData, TurnRecord } from "../types";
 
-export type Screen = "loading" | "title" | "setup" | "lobby" | "draft" | "battle" | "gameOver";
+export type Screen = "loading" | "title" | "setup" | "lobby" | "draft" | "preBattleLoading" | "battle" | "gameOver";
 export type SetupStep = "idle" | "connecting" | "creatingWallet" | "funding" | "consuming" | "done";
 export type BattlePhase = "choosing" | "committing" | "waitingCommit" | "revealing" | "waitingReveal" | "resolving" | "animating";
 

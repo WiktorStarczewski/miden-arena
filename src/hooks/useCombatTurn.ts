@@ -27,8 +27,9 @@ import type { TurnAction, TurnRecord } from "../types";
 // Constants
 // ---------------------------------------------------------------------------
 
-/** Duration (ms) to show the animation phase before advancing to the next turn. */
-const ANIMATION_DURATION_MS = 2500;
+/** Duration (ms) to show the animation phase before advancing to the next turn.
+ *  Must accommodate two sequential attack animations (faster champ first). */
+const ANIMATION_DURATION_MS = 4000;
 
 // ---------------------------------------------------------------------------
 // Types
