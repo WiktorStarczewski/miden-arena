@@ -32,8 +32,9 @@ export default function DraftTimeline({
       <div className="flex items-center justify-center gap-1">
         {DRAFT_SEQUENCE.map((picker, index) => {
           const pickIdx = index + 1;
-          const isCompleted = pickIdx < pickNumber;
-          const isCurrent = pickIdx === pickNumber;
+          const activePick = pickNumber + 1;
+          const isCompleted = pickIdx < activePick;
+          const isCurrent = pickIdx === activePick;
           const isMyPick = picker === role;
 
           return (
