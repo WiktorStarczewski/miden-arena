@@ -154,9 +154,9 @@ function executeAction(
       const oldHp = actor.state.currentHp;
       actor.state.currentHp = Math.min(actor.state.maxHp, oldHp + healAmount);
       const actualHeal = actor.state.currentHp - oldHp;
-      if (actualHeal > 0) {
-        events.push({ type: "heal", championId: actor.champion.id, amount: actualHeal, newHp: actor.state.currentHp });
-      }
+      // Always emit heal event so the animation system shows feedback,
+      // even when the champion is already at full HP (amount will be 0).
+      events.push({ type: "heal", championId: actor.champion.id, amount: actualHeal, newHp: actor.state.currentHp });
       break;
     }
 
