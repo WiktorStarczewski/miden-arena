@@ -1,0 +1,14 @@
+node_modules/
+dist/
+*.local
+.env
+.env.*
+!.env.example
+
+# Intermediate model build artifacts (keep only merged GLBs)
+public/models/*.fbx
+public/models/*.*.glb
+
+# Build scripts for model conversion
+convert_fbx_to_glb.py
+merge_animations.py
