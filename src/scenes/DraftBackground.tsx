@@ -1,5 +1,6 @@
-import React, { useRef, useMemo, useEffect } from "react";
+import React, { useRef, useMemo, useEffect, Suspense } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
+import { useTexture } from "@react-three/drei";
 import {
   Group,
   Color,
@@ -9,26 +10,24 @@ import {
   Points,
   AdditiveBlending,
   ShaderMaterial,
-  Mesh,
   Vector2,
   MathUtils,
   FrontSide,
+  SRGBColorSpace,
 } from "three";
+import type { Element } from "../types/game";
 
-// TYPES
-// ================================================================================================
+const BASE = import.meta.env.BASE_URL;
 
 interface ThemeConfig {
   topColor: string;
   bottomColor: string;
-  fogColor: string;
   particleColor: string;
   particleCount: number;
   particleSize: number;
   particleSpeed: number;
   particleDirection: "up" | "down" | "random";
-  midgroundColor: string;
-  midgroundShapes: "peaks" | "waves" | "dunes" | "crystals" | "clouds" | "coral" | "rays" | "tentacles";
+  element: Element | null;
 }
 
 interface DraftBackgroundProps {
@@ -37,163 +36,82 @@ interface DraftBackgroundProps {
   lowPower?: boolean;
 }
 
-// SEEDED PRNG
-// ================================================================================================
-
-function seededRandom(seed: number): () => number {
-  let s = seed;
-  return () => {
-    s = (s * 16807) % 2147483647;
-    return (s - 1) / 2147483646;
-  };
-}
-
-// Map shape type to a stable seed
-const SHAPE_SEEDS: Record<string, number> = {
-  peaks: 1001, waves: 2002, dunes: 3003, crystals: 4004,
-  clouds: 5005, coral: 6006, rays: 7007, tentacles: 8008,
-};
-
 // CHAMPION THEMES
 // ================================================================================================
 
 const THEMES: Record<number, ThemeConfig> = {
-  0: { // Inferno — fire
-    topColor: "#080200",
-    bottomColor: "#2a0800",
-    fogColor: "#140500",
-    particleColor: "#ff6600",
-    particleCount: 120,
-    particleSize: 0.04,
-    particleSpeed: 0.6,
-    particleDirection: "up",
-    midgroundColor: "#3d1200",
-    midgroundShapes: "peaks",
+  0: { // Inferno
+    element: "fire", topColor: "#080200", bottomColor: "#2a0800",
+    particleColor: "#ff6600", particleCount: 120, particleSize: 0.04,
+    particleSpeed: 0.6, particleDirection: "up",
   },
-  1: { // Boulder — earth
-    topColor: "#0a0804",
-    bottomColor: "#1e1608",
-    fogColor: "#120e06",
-    particleColor: "#c4a060",
-    particleCount: 80,
-    particleSize: 0.025,
-    particleSpeed: 0.15,
-    particleDirection: "down",
-    midgroundColor: "#2e2210",
-    midgroundShapes: "dunes",
+  1: { // Boulder
+    element: "earth", topColor: "#0a0804", bottomColor: "#1e1608",
+    particleColor: "#c4a060", particleCount: 80, particleSize: 0.025,
+    particleSpeed: 0.15, particleDirection: "down",
   },
-  2: { // Ember — fire
-    topColor: "#0a0404",
-    bottomColor: "#2e1408",
-    fogColor: "#180a04",
-    particleColor: "#ffaa44",
-    particleCount: 100,
-    particleSize: 0.03,
-    particleSpeed: 0.3,
-    particleDirection: "random",
-    midgroundColor: "#3a1a08",
-    midgroundShapes: "dunes",
+  2: { // Ember
+    element: "fire", topColor: "#0a0404", bottomColor: "#2e1408",
+    particleColor: "#ffaa44", particleCount: 100, particleSize: 0.03,
+    particleSpeed: 0.3, particleDirection: "random",
   },
-  3: { // Torrent — water
-    topColor: "#020408",
-    bottomColor: "#061828",
-    fogColor: "#040c18",
-    particleColor: "#66ccff",
-    particleCount: 140,
-    particleSize: 0.02,
-    particleSpeed: 1.2,
-    particleDirection: "down",
-    midgroundColor: "#0e2840",
-    midgroundShapes: "waves",
+  3: { // Torrent
+    element: "water", topColor: "#020408", bottomColor: "#061828",
+    particleColor: "#66ccff", particleCount: 140, particleSize: 0.02,
+    particleSpeed: 1.2, particleDirection: "down",
   },
-  4: { // Gale — wind
-    topColor: "#040a06",
-    bottomColor: "#102820",
-    fogColor: "#081810",
-    particleColor: "#88cc66",
-    particleCount: 90,
-    particleSize: 0.035,
-    particleSpeed: 0.8,
-    particleDirection: "random",
-    midgroundColor: "#1a3828",
-    midgroundShapes: "clouds",
+  4: { // Gale
+    element: "wind", topColor: "#040a06", bottomColor: "#102820",
+    particleColor: "#88cc66", particleCount: 90, particleSize: 0.035,
+    particleSpeed: 0.8, particleDirection: "random",
   },
-  5: { // Tide — water
-    topColor: "#000408",
-    bottomColor: "#041420",
-    fogColor: "#020a14",
-    particleColor: "#44ddff",
-    particleCount: 100,
-    particleSize: 0.04,
-    particleSpeed: 0.25,
-    particleDirection: "up",
-    midgroundColor: "#0c2030",
-    midgroundShapes: "coral",
+  5: { // Tide
+    element: "water", topColor: "#000408", bottomColor: "#041420",
+    particleColor: "#44ddff", particleCount: 100, particleSize: 0.04,
+    particleSpeed: 0.25, particleDirection: "up",
   },
-  6: { // Quake — earth
-    topColor: "#060606",
-    bottomColor: "#1a1408",
-    fogColor: "#100c06",
-    particleColor: "#cc9933",
-    particleCount: 60,
-    particleSize: 0.06,
-    particleSpeed: 0.1,
-    particleDirection: "random",
-    midgroundColor: "#2a2010",
-    midgroundShapes: "crystals",
+  6: { // Quake
+    element: "earth", topColor: "#060606", bottomColor: "#1a1408",
+    particleColor: "#cc9933", particleCount: 60, particleSize: 0.06,
+    particleSpeed: 0.1, particleDirection: "random",
   },
-  7: { // Storm — wind
-    topColor: "#040210",
-    bottomColor: "#0c1038",
-    fogColor: "#080618",
-    particleColor: "#aabbff",
-    particleCount: 120,
-    particleSize: 0.025,
-    particleSpeed: 1.0,
-    particleDirection: "down",
-    midgroundColor: "#161848",
-    midgroundShapes: "clouds",
+  7: { // Storm
+    element: "wind", topColor: "#040210", bottomColor: "#0c1038",
+    particleColor: "#aabbff", particleCount: 120, particleSize: 0.025,
+    particleSpeed: 1.0, particleDirection: "down",
   },
-  8: { // Phoenix — fire
-    topColor: "#0a0800",
-    bottomColor: "#2a2008",
-    fogColor: "#181004",
-    particleColor: "#ffdd66",
-    particleCount: 150,
-    particleSize: 0.03,
-    particleSpeed: 0.7,
-    particleDirection: "up",
-    midgroundColor: "#3a2a0c",
-    midgroundShapes: "rays",
+  8: { // Phoenix
+    element: "fire", topColor: "#0a0800", bottomColor: "#2a2008",
+    particleColor: "#ffdd66", particleCount: 150, particleSize: 0.03,
+    particleSpeed: 0.7, particleDirection: "up",
   },
-  9: { // Kraken — water
-    topColor: "#020004",
-    bottomColor: "#0a0418",
-    fogColor: "#06020c",
-    particleColor: "#8844ff",
-    particleCount: 80,
-    particleSize: 0.045,
-    particleSpeed: 0.15,
-    particleDirection: "random",
-    midgroundColor: "#140828",
-    midgroundShapes: "tentacles",
+  9: { // Kraken
+    element: "water", topColor: "#020004", bottomColor: "#0a0418",
+    particleColor: "#8844ff", particleCount: 80, particleSize: 0.045,
+    particleSpeed: 0.15, particleDirection: "random",
   },
 };
 
 const DEFAULT_THEME: ThemeConfig = {
-  topColor: "#06060c",
-  bottomColor: "#0c0c16",
-  fogColor: "#0a0a12",
-  particleColor: "#666688",
-  particleCount: 40,
-  particleSize: 0.02,
-  particleSpeed: 0.1,
-  particleDirection: "random",
-  midgroundColor: "#14141e",
-  midgroundShapes: "peaks",
+  element: null, topColor: "#06060c", bottomColor: "#0c0c16",
+  particleColor: "#666688", particleCount: 40, particleSize: 0.02,
+  particleSpeed: 0.1, particleDirection: "random",
 };
 
-// GRADIENT BACKDROP
+// IMAGE PATHS PER ELEMENT
+// ================================================================================================
+
+const BG_PATHS: Record<Element, string> = {
+  fire: `${BASE}textures/draft-bg/fire/bg.jpg`,
+  water: `${BASE}textures/draft-bg/water/bg.jpg`,
+  earth: `${BASE}textures/draft-bg/earth/bg.jpg`,
+  wind: `${BASE}textures/draft-bg/wind/bg.jpg`,
+};
+
+// Preload all element backgrounds so switching champions is instant
+Object.values(BG_PATHS).forEach((url) => useTexture.preload(url));
+
+// GRADIENT BACKDROP (base layer / fallback while images load)
 // ================================================================================================
 
 const gradientVertexShader = /* glsl */ `
@@ -210,7 +128,6 @@ const gradientFragmentShader = /* glsl */ `
   varying vec2 vUv;
   void main() {
     float t = vUv.y;
-    // Smooth curve for richer gradient
     t = t * t * (3.0 - 2.0 * t);
     vec3 color = mix(uBottomColor, uTopColor, t);
     gl_FragColor = vec4(color, 1.0);
@@ -235,10 +152,13 @@ const GradientBackdrop = React.memo(function GradientBackdrop({
     targetBottom.current.set(bottomColor);
   }, [topColor, bottomColor]);
 
-  const uniforms = useMemo(() => ({
-    uTopColor: { value: currentTop.current },
-    uBottomColor: { value: currentBottom.current },
-  }), []);
+  const uniforms = useMemo(
+    () => ({
+      uTopColor: { value: currentTop.current },
+      uBottomColor: { value: currentBottom.current },
+    }),
+    [],
+  );
 
   useFrame((_, delta) => {
     if (!matRef.current) return;
@@ -264,222 +184,64 @@ const GradientBackdrop = React.memo(function GradientBackdrop({
   );
 });
 
-// MIDGROUND SILHOUETTES
+// TEXTURED LAYER
 // ================================================================================================
 
-function generateShapeVertices(
-  type: ThemeConfig["midgroundShapes"],
-): { positions: number[]; indices: number[] } {
-  const positions: number[] = [];
-  const indices: number[] = [];
-  const rng = seededRandom(SHAPE_SEEDS[type] ?? 9999);
-
-  switch (type) {
-    case "peaks": {
-      const peakCount = 7;
-      const spread = 24;
-      let vertIdx = 0;
-      for (let i = 0; i < peakCount; i++) {
-        const x = (i / (peakCount - 1)) * spread - spread / 2;
-        const h = 1.5 + Math.sin(i * 2.3) * 1.2 + rng() * 0.5;
-        const w = 1.5 + rng() * 1.0;
-        positions.push(x - w, -2, 0, x, -2 + h, 0, x + w, -2, 0);
-        indices.push(vertIdx, vertIdx + 1, vertIdx + 2);
-        vertIdx += 3;
-      }
-      break;
-    }
-    case "waves": {
-      const segments = 30;
-      const w = 28;
-      let vertIdx = 0;
-      for (let i = 0; i <= segments; i++) {
-        const t = i / segments;
-        const x = t * w - w / 2;
-        const y = Math.sin(t * Math.PI * 3) * 0.8 + Math.sin(t * Math.PI * 5) * 0.4;
-        positions.push(x, -2, 0);
-        positions.push(x, -2 + 1.2 + y, 0);
-      }
-      for (let i = 0; i < segments; i++) {
-        const bl = vertIdx + i * 2;
-        const tl = bl + 1;
-        const br = bl + 2;
-        const tr = bl + 3;
-        indices.push(bl, tl, br, tl, tr, br);
-      }
-      break;
-    }
-    case "dunes": {
-      const segments = 30;
-      const w = 28;
-      let vertIdx = 0;
-      for (let i = 0; i <= segments; i++) {
-        const t = i / segments;
-        const x = t * w - w / 2;
-        const y = Math.sin(t * Math.PI * 2) * 0.6 + Math.sin(t * Math.PI * 1.3 + 0.5) * 0.8;
-        positions.push(x, -2, 0);
-        positions.push(x, -2 + Math.max(0.3, 1.0 + y), 0);
-      }
-      for (let i = 0; i < segments; i++) {
-        const bl = vertIdx + i * 2;
-        const tl = bl + 1;
-        const br = bl + 2;
-        const tr = bl + 3;
-        indices.push(bl, tl, br, tl, tr, br);
-      }
-      break;
-    }
-    case "crystals": {
-      const count = 9;
-      const spread = 22;
-      let vertIdx = 0;
-      for (let i = 0; i < count; i++) {
-        const x = (i / (count - 1)) * spread - spread / 2;
-        const h = 1.0 + Math.sin(i * 1.7) * 0.8;
-        const w = 0.4 + rng() * 0.5;
-        positions.push(x - w, -2, 0, x, -2 + h, 0, x + w, -2, 0);
-        indices.push(vertIdx, vertIdx + 1, vertIdx + 2);
-        vertIdx += 3;
-        if (i % 2 === 0) {
-          const sh = 0.6 + rng() * 0.5;
-          const sx = x + 0.8;
-          positions.push(sx - w * 0.6, 3, 0, sx, 3 - sh, 0, sx + w * 0.6, 3, 0);
-          indices.push(vertIdx, vertIdx + 1, vertIdx + 2);
-          vertIdx += 3;
-        }
-      }
-      break;
-    }
-    case "clouds": {
-      const segments = 30;
-      const w = 28;
-      let vertIdx = 0;
-      for (let i = 0; i <= segments; i++) {
-        const t = i / segments;
-        const x = t * w - w / 2;
-        const y = Math.abs(Math.sin(t * Math.PI * 4)) * 0.7 +
-                  Math.abs(Math.sin(t * Math.PI * 2.5 + 1)) * 0.5;
-        positions.push(x, -2, 0);
-        positions.push(x, -2 + 0.5 + y, 0);
-      }
-      for (let i = 0; i < segments; i++) {
-        const bl = vertIdx + i * 2;
-        const tl = bl + 1;
-        const br = bl + 2;
-        const tr = bl + 3;
-        indices.push(bl, tl, br, tl, tr, br);
-      }
-      break;
-    }
-    case "coral": {
-      const count = 11;
-      const spread = 24;
-      let vertIdx = 0;
-      for (let i = 0; i < count; i++) {
-        const x = (i / (count - 1)) * spread - spread / 2;
-        const h = 0.8 + Math.sin(i * 2.1 + 0.3) * 0.6 + rng() * 0.3;
-        const w = 0.5 + rng() * 0.6;
-        positions.push(x - w * 0.3, -2, 0, x, -2 + h, 0, x + w * 0.3, -2, 0);
-        indices.push(vertIdx, vertIdx + 1, vertIdx + 2);
-        vertIdx += 3;
-        if (i % 2 === 0) {
-          const bh = h * 0.6;
-          positions.push(x, -2 + h * 0.3, 0, x + w, -2 + bh, 0, x + w * 0.3, -2, 0);
-          indices.push(vertIdx, vertIdx + 1, vertIdx + 2);
-          vertIdx += 3;
-        }
-      }
-      break;
-    }
-    case "rays": {
-      const rayCount = 9;
-      let vertIdx = 0;
-      for (let i = 0; i < rayCount; i++) {
-        const angle = ((i / (rayCount - 1)) - 0.5) * Math.PI * 0.8;
-        const length = 4 + Math.sin(i * 1.5) * 2;
-        const halfWidth = 0.15 + rng() * 0.1;
-        const tipX = Math.sin(angle) * length;
-        const tipY = Math.cos(angle) * length;
-        positions.push(
-          -halfWidth, -2, 0,
-          tipX, -2 + tipY, 0,
-          halfWidth, -2, 0,
-        );
-        indices.push(vertIdx, vertIdx + 1, vertIdx + 2);
-        vertIdx += 3;
-      }
-      break;
-    }
-    case "tentacles": {
-      const tentacleCount = 6;
-      const spread = 20;
-      let vertIdx = 0;
-      for (let i = 0; i < tentacleCount; i++) {
-        const baseX = (i / (tentacleCount - 1)) * spread - spread / 2;
-        const h = 1.5 + Math.sin(i * 1.8) * 1.0;
-        const w = 0.6 + rng() * 0.4;
-        const curve = Math.sin(i * 1.3) * 1.5;
-        positions.push(
-          baseX - w * 0.3, -2, 0,
-          baseX + curve, -2 + h, 0,
-          baseX + w * 0.3, -2, 0,
-        );
-        indices.push(vertIdx, vertIdx + 1, vertIdx + 2);
-        vertIdx += 3;
-      }
-      break;
-    }
-  }
-
-  return { positions, indices };
-}
-
-const MidgroundSilhouettes = React.memo(function MidgroundSilhouettes({
-  shapeType,
-  color,
+const TexturedLayer = React.memo(function TexturedLayer({
+  url,
+  z,
+  renderOrder,
+  transparent = false,
+  opacity = 1,
 }: {
-  shapeType: ThemeConfig["midgroundShapes"];
-  color: string;
+  url: string;
+  z: number;
+  renderOrder: number;
+  transparent?: boolean;
+  opacity?: number;
 }) {
-  const meshRef = useRef<Mesh>(null);
-  const currentColor = useRef(new Color(color));
-  const targetColor = useRef(new Color(color));
+  const texture = useTexture(url);
 
   useEffect(() => {
-    targetColor.current.set(color);
-  }, [color]);
+    texture.colorSpace = SRGBColorSpace;
+    texture.needsUpdate = true;
+  }, [texture]);
 
-  const geometry = useMemo(() => {
-    const { positions, indices } = generateShapeVertices(shapeType);
-    const geo = new BufferGeometry();
-    geo.setAttribute("position", new Float32BufferAttribute(new Float32Array(positions), 3));
-    geo.setIndex(indices);
-    geo.computeVertexNormals();
-    return geo;
-  }, [shapeType]);
-
-  useEffect(() => {
-    return () => geometry.dispose();
-  }, [geometry]);
-
-  useFrame((_, delta) => {
-    if (!meshRef.current) return;
-    const factor = 1 - Math.pow(0.001, delta);
-    currentColor.current.lerp(targetColor.current, factor);
-    const mat = meshRef.current.material as unknown as { color: Color };
-    mat.color.copy(currentColor.current);
-  });
+  // Size the plane generously to cover the full viewport from the camera angle
+  const aspect = texture.image.width / texture.image.height;
+  const w = Math.max(30, 20 * aspect);
+  const h = w / aspect;
 
   return (
-    <mesh ref={meshRef} geometry={geometry} position={[0, -1, -5]} renderOrder={-8}>
+    <mesh position={[0, -4, z]} renderOrder={renderOrder}>
+      <planeGeometry args={[w, h]} />
       <meshBasicMaterial
-        color={color}
-        transparent
-        opacity={0.85}
+        map={texture}
+        transparent={transparent || opacity < 1}
+        opacity={opacity}
         depthWrite={false}
         fog={false}
       />
     </mesh>
+  );
+});
+
+// IMAGE BACKGROUND (single photorealistic image per element)
+// ================================================================================================
+
+const ImageBackground = React.memo(function ImageBackground({
+  element,
+  mousePosition,
+}: {
+  element: Element;
+  mousePosition: React.RefObject<{ x: number; y: number }>;
+}) {
+  const url = BG_PATHS[element];
+
+  return (
+    <ParallaxLayer mousePosition={mousePosition} depthFactor={0.15}>
+      <TexturedLayer url={url} z={-9} renderOrder={-9} opacity={0.55} />
+    </ParallaxLayer>
   );
 });
 
@@ -510,25 +272,19 @@ const AtmosphericParticles = React.memo(function AtmosphericParticles({
   const { geometry, material, particleData } = useMemo(() => {
     const geo = new BufferGeometry();
     const positions = new Float32Array(count * 3);
-    const data: {
-      driftX: number;
-      driftY: number;
-      phase: number;
-    }[] = [];
+    const data: { driftX: number; driftY: number; phase: number }[] = [];
 
     for (let i = 0; i < count; i++) {
-      const x = (Math.random() - 0.5) * 20;
-      const y = (Math.random() - 0.5) * 12;
-      const z = -1 + Math.random() * -5;
-
-      positions[i * 3] = x;
-      positions[i * 3 + 1] = y;
-      positions[i * 3 + 2] = z;
+      positions[i * 3] = (Math.random() - 0.5) * 20;
+      positions[i * 3 + 1] = (Math.random() - 0.5) * 12;
+      positions[i * 3 + 2] = -1 + Math.random() * -5;
 
       const dy =
-        direction === "up" ? speed :
-        direction === "down" ? -speed :
-        (Math.random() - 0.5) * speed * 2;
+        direction === "up"
+          ? speed
+          : direction === "down"
+            ? -speed
+            : (Math.random() - 0.5) * speed * 2;
 
       data.push({
         driftX: (Math.random() - 0.5) * 0.3,
@@ -563,7 +319,6 @@ const AtmosphericParticles = React.memo(function AtmosphericParticles({
   useFrame((state, delta) => {
     if (!pointsRef.current) return;
 
-    // Lerp color
     const factor = 1 - Math.pow(0.001, delta);
     currentColor.current.lerp(targetColor.current, factor);
     material.color.copy(currentColor.current);
@@ -574,13 +329,10 @@ const AtmosphericParticles = React.memo(function AtmosphericParticles({
 
     for (let i = 0; i < count; i++) {
       const d = particleData[i];
-      // Drift
       posArray[i * 3] += d.driftX * delta;
       posArray[i * 3 + 1] += d.driftY * delta;
-      // Horizontal sway
       posArray[i * 3] += Math.sin(time * 0.5 + d.phase) * 0.002;
 
-      // Wrap around vertically
       if (posArray[i * 3 + 1] > 6) {
         posArray[i * 3 + 1] = -6;
         posArray[i * 3] = (Math.random() - 0.5) * 20;
@@ -589,7 +341,6 @@ const AtmosphericParticles = React.memo(function AtmosphericParticles({
         posArray[i * 3 + 1] = 6;
         posArray[i * 3] = (Math.random() - 0.5) * 20;
       }
-      // Wrap around horizontally
       if (posArray[i * 3] > 12) posArray[i * 3] = -12;
       if (posArray[i * 3] < -12) posArray[i * 3] = 12;
     }
@@ -632,10 +383,8 @@ const ParallaxLayer = React.memo(function ParallaxLayer({
 // MAIN COMPONENT
 // ================================================================================================
 
-/** Brighten a hex color for low-power mode where bloom/HDR are absent. */
 function brightenHex(hex: string, factor: number): string {
   const c = new Color(hex);
-  // Lift each channel: blend toward a lighter version
   c.r = Math.min(1, c.r * factor + 0.04);
   c.g = Math.min(1, c.g * factor + 0.04);
   c.b = Math.min(1, c.b * factor + 0.04);
@@ -648,7 +397,9 @@ const DraftBackground = React.memo(function DraftBackground({
   lowPower = false,
 }: DraftBackgroundProps) {
   const scene = useThree((state) => state.scene);
-  const baseTheme = championId !== null ? (THEMES[championId] ?? DEFAULT_THEME) : DEFAULT_THEME;
+  const baseTheme =
+    championId !== null ? (THEMES[championId] ?? DEFAULT_THEME) : DEFAULT_THEME;
+  const element: Element | null = baseTheme.element ?? null;
 
   // In low-power mode, brighten the gradient so it's not just black
   const theme = useMemo(() => {
@@ -657,7 +408,6 @@ const DraftBackground = React.memo(function DraftBackground({
       ...baseTheme,
       topColor: brightenHex(baseTheme.topColor, 3.0),
       bottomColor: brightenHex(baseTheme.bottomColor, 2.5),
-      midgroundColor: brightenHex(baseTheme.midgroundColor, 2.0),
     };
   }, [baseTheme, lowPower]);
 
@@ -676,7 +426,7 @@ const DraftBackground = React.memo(function DraftBackground({
 
   return (
     <group>
-      {/* Back layer: gradient sky — subtle parallax */}
+      {/* Base gradient (always present — shows during load & through transparent areas) */}
       <ParallaxLayer mousePosition={mousePosition} depthFactor={0.1}>
         <GradientBackdrop
           topColor={theme.topColor}
@@ -684,19 +434,22 @@ const DraftBackground = React.memo(function DraftBackground({
         />
       </ParallaxLayer>
 
-      {/* Mid layer: silhouette shapes — moderate parallax */}
-      <ParallaxLayer mousePosition={mousePosition} depthFactor={0.3}>
-        <MidgroundSilhouettes
-          shapeType={theme.midgroundShapes}
-          color={theme.midgroundColor}
-        />
-      </ParallaxLayer>
+      {/* Photorealistic background image (skip in low-power mode to save GPU) */}
+      {element && !lowPower && (
+        <Suspense fallback={null}>
+          <ImageBackground element={element} mousePosition={mousePosition} />
+        </Suspense>
+      )}
 
-      {/* Front layer: atmospheric particles — pronounced parallax */}
+      {/* Atmospheric particles */}
       <ParallaxLayer mousePosition={mousePosition} depthFactor={0.5}>
         <AtmosphericParticles
           color={theme.particleColor}
-          count={lowPower ? Math.round(theme.particleCount * 0.15) : theme.particleCount}
+          count={
+            lowPower
+              ? Math.round(theme.particleCount * 0.15)
+              : theme.particleCount
+          }
           size={theme.particleSize}
           speed={theme.particleSpeed}
           direction={theme.particleDirection}
