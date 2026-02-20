@@ -35,7 +35,7 @@ import {
   type CameraShakeConfig,
 } from "./AttackEffect";
 import PostProcessing from "./PostProcessing";
-import { IS_LOW_POWER } from "../utils/deviceCapabilities";
+import { useLowPower } from "../utils/deviceCapabilities";
 
 // TYPES
 // ================================================================================================
@@ -173,12 +173,13 @@ interface KoExplosionProps {
 }
 
 const KO_DURATION = 1.5; // seconds
-const KO_PARTICLE_COUNT = IS_LOW_POWER ? 20 : 80;
 
 const KoExplosion = React.memo(function KoExplosion({
   position,
   active,
 }: KoExplosionProps) {
+  const lowPower = useLowPower();
+  const KO_PARTICLE_COUNT = lowPower ? 20 : 80;
   const pointsRef = useRef<Points>(null);
   const flashRef = useRef<Mesh>(null);
   const ring1Ref = useRef<Mesh>(null);
@@ -228,7 +229,7 @@ const KoExplosion = React.memo(function KoExplosion({
     });
 
     return { geometry: geo, material: mat, velocities: vels };
-  }, []);
+  }, [KO_PARTICLE_COUNT]);
 
   useFrame((_, delta) => {
     if (!visible) return;
@@ -326,7 +327,7 @@ const KoExplosion = React.memo(function KoExplosion({
       {/* Debris particles */}
       <points ref={pointsRef} geometry={geometry} material={material} />
 
-      {!IS_LOW_POWER && (
+      {!lowPower && (
         <>
           {/* Intense sparkles */}
           <Sparkles
@@ -368,11 +369,11 @@ interface VictoryCelebrationProps {
   active: boolean;
 }
 
-const VICTORY_PARTICLE_COUNT = IS_LOW_POWER ? 30 : 120;
-
 const VictoryCelebration = React.memo(function VictoryCelebration({
   active,
 }: VictoryCelebrationProps) {
+  const lowPower = useLowPower();
+  const VICTORY_PARTICLE_COUNT = lowPower ? 30 : 120;
   const pointsRef = useRef<Points>(null);
   const [visible, setVisible] = useState(false);
 
@@ -429,7 +430,7 @@ const VictoryCelebration = React.memo(function VictoryCelebration({
     });
 
     return { geometry: geo, material: mat, particleData: data };
-  }, []);
+  }, [VICTORY_PARTICLE_COUNT]);
 
   useFrame(() => {
     if (!visible || !pointsRef.current) return;
@@ -465,7 +466,7 @@ const VictoryCelebration = React.memo(function VictoryCelebration({
     <group>
       <points ref={pointsRef} geometry={geometry} material={material} />
 
-      {!IS_LOW_POWER && (
+      {!lowPower && (
         <>
           {/* Additional sparkle layers for richness */}
           <Sparkles
@@ -527,6 +528,7 @@ const SelfEffect = React.memo(function SelfEffect({
   position: [number, number, number];
   type: "buff" | "heal";
 }) {
+  const lowPower = useLowPower();
   const ringRef = useRef<Mesh>(null);
   const progressRef = useRef(0);
   const [visible, setVisible] = useState(true);
@@ -566,7 +568,7 @@ const SelfEffect = React.memo(function SelfEffect({
         />
       </mesh>
 
-      {!IS_LOW_POWER && (
+      {!lowPower && (
         <>
           {/* Rising sparkles */}
           <Sparkles
@@ -850,9 +852,21 @@ const ArenaScene = React.memo(function ArenaScene({
   showVictory,
   indicators,
 }: ArenaSceneProps) {
-  const [dpr, setDpr] = useState(IS_LOW_POWER ? 1 : 1.5);
+  const lowPower = useLowPower();
+  const [dpr, setDpr] = useState(lowPower ? 1 : 1.5);
   const [hitFlash, setHitFlash] = useState(false);
-  const [performanceScale, setPerformanceScale] = useState(IS_LOW_POWER ? 0.5 : 1.0);
+  const [performanceScale, setPerformanceScale] = useState(lowPower ? 0.5 : 1.0);
+
+  // Sync DPR / performanceScale when lowPower toggle changes
+  useEffect(() => {
+    if (lowPower) {
+      setDpr(1);
+      setPerformanceScale(0.5);
+    } else {
+      setDpr(1.5);
+      setPerformanceScale(1.0);
+    }
+  }, [lowPower]);
 
   // Trigger hit flash when attack completes, plus camera shake + SFX
   const handleAttackComplete = useCallback(() => {
@@ -875,7 +889,7 @@ const ArenaScene = React.memo(function ArenaScene({
 
   return (
     <Canvas
-      shadows={!IS_LOW_POWER}
+      shadows={!lowPower}
       dpr={dpr}
       camera={{
         position: CAMERA_POSITION,
@@ -890,7 +904,7 @@ const ArenaScene = React.memo(function ArenaScene({
       }}
     >
       <Suspense fallback={null}>
-        {IS_LOW_POWER ? (
+        {lowPower ? (
           <SceneContent
             myChampion={myChampion}
             opponentChampion={opponentChampion}

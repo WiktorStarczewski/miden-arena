@@ -1,4 +1,4 @@
-import React, { useRef, useMemo, Suspense, useState, useCallback } from "react";
+import React, { useRef, useMemo, Suspense, useState, useCallback, useEffect } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import {
   Environment,
@@ -11,7 +11,7 @@ import ChampionModel from "./ChampionModel";
 import ElementalAura from "./ElementalAura";
 import PostProcessing from "./PostProcessing";
 import DraftBackground from "./DraftBackground";
-import { IS_LOW_POWER } from "../utils/deviceCapabilities";
+import { useLowPower } from "../utils/deviceCapabilities";
 
 // TYPES
 // ================================================================================================
@@ -294,12 +294,18 @@ const DraftSceneContent = React.memo(function DraftSceneContent({
 // ================================================================================================
 
 const DraftStage = React.memo(function DraftStage(props: DraftStageProps) {
-  const [dpr, setDpr] = useState(IS_LOW_POWER ? 1 : 1.5);
+  const lowPower = useLowPower();
+  const [dpr, setDpr] = useState(lowPower ? 1 : 1.5);
   const [dragDeltaX, setDragDeltaX] = useState(0);
   const mousePosition = useRef({ x: 0, y: 0 });
   const isDragging = useRef(false);
   const lastPointerX = useRef(0);
   const cachedRect = useRef<DOMRect | null>(null);
+
+  // Sync DPR when lowPower toggle changes
+  useEffect(() => {
+    setDpr(lowPower ? 1 : 1.5);
+  }, [lowPower]);
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     isDragging.current = true;
@@ -330,7 +336,7 @@ const DraftStage = React.memo(function DraftStage(props: DraftStageProps) {
 
   return (
     <Canvas
-      shadows={!IS_LOW_POWER}
+      shadows={!lowPower}
       dpr={dpr}
       camera={{
         position: CAMERA_POSITION,
@@ -350,7 +356,7 @@ const DraftStage = React.memo(function DraftStage(props: DraftStageProps) {
       onPointerLeave={onPointerUp}
     >
       <Suspense fallback={null}>
-        {IS_LOW_POWER ? (
+        {lowPower ? (
           <DraftSceneContent {...props} dragDeltaX={dragDeltaX} mousePosition={mousePosition} lowPower />
         ) : (
           <PerformanceMonitor

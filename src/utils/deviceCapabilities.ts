@@ -1,9 +1,11 @@
 /**
  * Detect low-power devices (mobile, WebView, small screens) at import time.
- * Device type doesn't change at runtime so a module-level constant suffices.
+ * On mobile, low-power is always forced. On desktop, users can toggle SD/HD.
  */
 
-function detectLowPower(): boolean {
+import { create } from "zustand";
+
+function detectMobile(): boolean {
   if (typeof navigator === "undefined" || typeof window === "undefined") {
     return false;
   }
@@ -36,4 +38,31 @@ function detectLowPower(): boolean {
   return mobileUA || isIPad || webView || smallTouch || (lowDPR && touchScreen);
 }
 
-export const IS_LOW_POWER: boolean = detectLowPower();
+/** Static detection — true on mobile/WebView, never changes at runtime. */
+export const IS_MOBILE: boolean = detectMobile();
+
+/** Backward compat alias — reads initial value (use `useLowPower()` for reactive). */
+export const IS_LOW_POWER: boolean = IS_MOBILE;
+
+// ---------------------------------------------------------------------------
+// Zustand store for reactive low-power toggle (desktop SD/HD switcher)
+// ---------------------------------------------------------------------------
+
+interface LowPowerStore {
+  lowPower: boolean;
+  toggle: () => void;
+}
+
+export const useLowPowerStore = create<LowPowerStore>((set) => ({
+  lowPower: IS_MOBILE,
+  toggle: () => set((s) => {
+    // On mobile, always stay low-power — toggle is a no-op
+    if (IS_MOBILE) return s;
+    return { lowPower: !s.lowPower };
+  }),
+}));
+
+/** Convenience hook — returns current lowPower state. */
+export function useLowPower(): boolean {
+  return useLowPowerStore((s) => s.lowPower);
+}
