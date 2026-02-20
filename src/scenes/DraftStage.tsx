@@ -338,6 +338,7 @@ const DraftStage = React.memo(function DraftStage(props: DraftStageProps) {
     <Canvas
       shadows={!lowPower}
       dpr={dpr}
+      resize={{ offsetSize: true }}
       camera={{
         position: CAMERA_POSITION,
         fov: 35,

@@ -163,7 +163,7 @@ export default function DraftScreen() {
           {/* Champion pool — scrollable */}
           <div className="flex min-h-0 flex-1 flex-col">
             <p className="font-display mb-2 text-xs font-bold text-gray-400 uppercase flex-shrink-0">Available Champions</p>
-            <div className="flex-1 overflow-y-auto min-h-0 -m-1 p-1">
+            <div className="flex-1 overflow-y-scroll min-h-0 -m-1 p-1">
               <DraftPool
                 pool={draft.pool}
                 selectedId={previewId}

@@ -891,6 +891,7 @@ const ArenaScene = React.memo(function ArenaScene({
     <Canvas
       shadows={!lowPower}
       dpr={dpr}
+      resize={{ offsetSize: true }}
       camera={{
         position: CAMERA_POSITION,
         fov: 40,
