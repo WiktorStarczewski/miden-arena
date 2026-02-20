@@ -237,18 +237,14 @@ const DraftSceneContent = React.memo(function DraftSceneContent({
 
   return (
     <>
-      {/* Background */}
-      <fog attach="fog" args={["#12121e", 6, 18]} />
+      {/* Background — push fog far back in low-power so the brightened gradient stays visible */}
+      <fog attach="fog" args={["#12121e", lowPower ? 12 : 6, lowPower ? 30 : 18]} />
 
       {/* Themed parallax background */}
       <DraftBackground championId={championId} mousePosition={mousePosition} lowPower={lowPower} />
 
-      {/* Environment (skip HDR cubemap on low-power, use a dark gradient-friendly color instead) */}
-      {lowPower ? (
-        <color attach="background" args={["#12121e"]} />
-      ) : (
-        <Environment preset="night" />
-      )}
+      {/* Environment (skip HDR cubemap on low-power) */}
+      {!lowPower && <Environment preset="night" />}
 
       {/* Lighting */}
       <DraftLighting elementColor={elementColor} lowPower={lowPower} />

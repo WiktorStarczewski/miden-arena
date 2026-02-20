@@ -632,19 +632,40 @@ const ParallaxLayer = React.memo(function ParallaxLayer({
 // MAIN COMPONENT
 // ================================================================================================
 
+/** Brighten a hex color for low-power mode where bloom/HDR are absent. */
+function brightenHex(hex: string, factor: number): string {
+  const c = new Color(hex);
+  // Lift each channel: blend toward a lighter version
+  c.r = Math.min(1, c.r * factor + 0.04);
+  c.g = Math.min(1, c.g * factor + 0.04);
+  c.b = Math.min(1, c.b * factor + 0.04);
+  return "#" + c.getHexString();
+}
+
 const DraftBackground = React.memo(function DraftBackground({
   championId,
   mousePosition,
   lowPower = false,
 }: DraftBackgroundProps) {
   const scene = useThree((state) => state.scene);
-  const theme = championId !== null ? (THEMES[championId] ?? DEFAULT_THEME) : DEFAULT_THEME;
+  const baseTheme = championId !== null ? (THEMES[championId] ?? DEFAULT_THEME) : DEFAULT_THEME;
+
+  // In low-power mode, brighten the gradient so it's not just black
+  const theme = useMemo(() => {
+    if (!lowPower) return baseTheme;
+    return {
+      ...baseTheme,
+      topColor: brightenHex(baseTheme.topColor, 3.0),
+      bottomColor: brightenHex(baseTheme.bottomColor, 2.5),
+      midgroundColor: brightenHex(baseTheme.midgroundColor, 2.0),
+    };
+  }, [baseTheme, lowPower]);
 
   // Lerp scene fog color
-  const fogTarget = useRef(new Color(theme.fogColor));
+  const fogTarget = useRef(new Color(theme.topColor));
   useEffect(() => {
-    fogTarget.current.set(theme.fogColor);
-  }, [theme.fogColor]);
+    fogTarget.current.set(theme.topColor);
+  }, [theme.topColor]);
 
   useFrame((_, delta) => {
     if (scene.fog && "color" in scene.fog) {
