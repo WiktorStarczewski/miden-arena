@@ -192,32 +192,31 @@ export default function BattleHUD({ onSubmitMove, children }: BattleHUDProps) {
                     />
                   ))}
                 </div>
-
-                {/* Confirm button */}
-                {selectedAbility !== null && selectedAbility !== undefined && (
-                  <motion.button
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="
-                      w-full mt-2 py-3 rounded-xl font-display font-bold text-sm uppercase tracking-wider
-                      bg-amber-500/20 border border-amber-400/40 text-amber-300
-                      hover:bg-amber-500/30 active:scale-[0.98]
-                      transition-all duration-200
-                    "
-                    onClick={() => {
-                      if (onSubmitMove && selectedChampion != null && selectedAbility != null) {
-                        playSfx("confirm");
-                        onSubmitMove({ championId: selectedChampion, abilityIndex: selectedAbility });
-                      }
-                    }}
-                  >
-                    Confirm Move
-                  </motion.button>
-                )}
               </motion.div>
             )}
           </AnimatePresence>
         )}
+
+        {/* Confirm button — always visible so it contributes to layout */}
+        <button
+          disabled={!isChoosing || selectedAbility == null}
+          className={`
+            w-full mt-3 mb-2 py-3 rounded-xl font-display font-bold text-sm uppercase tracking-wider
+            border transition-all duration-200
+            ${isChoosing && selectedAbility != null
+              ? "bg-amber-500/20 border-amber-400/40 text-amber-300 hover:bg-amber-500/30 active:scale-[0.98] cursor-pointer"
+              : "bg-white/5 border-white/10 text-white/25 cursor-not-allowed"
+            }
+          `}
+          onClick={() => {
+            if (onSubmitMove && selectedChampion != null && selectedAbility != null) {
+              playSfx("confirm");
+              onSubmitMove({ championId: selectedChampion, abilityIndex: selectedAbility });
+            }
+          }}
+        >
+          {isChoosing ? "Confirm Move" : "Choose your move"}
+        </button>
       </div>
     </div>
   );

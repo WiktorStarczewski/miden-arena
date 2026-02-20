@@ -124,7 +124,7 @@ export default function DraftScreen() {
                       pickChampion(previewId);
                     }
                   }}
-                  className="font-display w-full rounded-xl px-4 py-2.5 text-sm font-bold text-white
+                  className="cursor-pointer font-display w-full rounded-xl px-4 py-2.5 text-sm font-bold text-white
                     transition-all duration-200 active:scale-[0.97]
                     disabled:opacity-40 disabled:cursor-not-allowed"
                   style={{

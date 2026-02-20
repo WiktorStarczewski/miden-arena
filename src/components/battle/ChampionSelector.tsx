@@ -36,7 +36,7 @@ export default function ChampionSelector({
       <div
         ref={scrollRef}
         className="
-          flex gap-3 overflow-x-auto py-1 px-1
+          flex justify-center gap-3 overflow-x-auto py-1 px-1
           snap-x snap-mandatory
           scrollbar-none
         "

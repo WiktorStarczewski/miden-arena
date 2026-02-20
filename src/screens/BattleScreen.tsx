@@ -361,11 +361,11 @@ export default function BattleScreen() {
 
   return (
     <GameLayout title={`Round ${battle.round}`}>
-      <div className="relative flex h-full flex-col overflow-hidden">
-        {/* 3D Arena Scene */}
+      <div className="relative flex h-full flex-col overflow-auto">
+        {/* 3D Arena Scene — fills remaining space above the HUD */}
         <div
-          className="relative flex-shrink-0"
-          style={{ height: "35vh", width: "calc(100% + 1.5rem)", margin: "-0.75rem -0.75rem 0" }}
+          className="relative flex-1"
+          style={{ minHeight: "30vh", width: "calc(100% + 1.5rem)", margin: "-0.75rem -0.75rem 0" }}
         >
           <ArenaScene
             myChampion={myActiveChampion}
@@ -376,8 +376,8 @@ export default function BattleScreen() {
           />
         </div>
 
-        {/* Battle HUD */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-1 pt-3 pb-4">
+        {/* Battle HUD — bottom-aligned, shrink-wrapped */}
+        <div className="flex-shrink-0 px-1 pt-3 pb-1">
           <BattleHUD onSubmitMove={submitMove} />
         </div>
       </div>

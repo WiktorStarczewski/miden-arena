@@ -117,7 +117,7 @@ export default function GameOverScreen() {
           <div className="flex gap-4">
             <motion.button
               onClick={resetGame}
-              className="flex-1 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 py-3 font-bold text-white shadow-lg active:scale-95"
+              className="cursor-pointer flex-1 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 py-3 font-bold text-white shadow-lg active:scale-95"
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.97 }}
             >
@@ -125,7 +125,7 @@ export default function GameOverScreen() {
             </motion.button>
             <motion.button
               onClick={resetGame}
-              className="flex-1 rounded-xl border border-white/10 bg-black/40 py-3 font-bold text-gray-300 active:scale-95"
+              className="cursor-pointer flex-1 rounded-xl border border-white/10 bg-black/40 py-3 font-bold text-gray-300 active:scale-95"
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.97 }}
             >

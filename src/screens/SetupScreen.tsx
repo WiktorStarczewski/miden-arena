@@ -105,7 +105,7 @@ export default function SetupScreen() {
           {step === "idle" && (
             <motion.button
               onClick={connect}
-              className="font-display rounded-3xl bg-gradient-to-r from-amber-500 to-orange-600 text-xl font-bold tracking-wide text-white shadow-2xl shadow-amber-500/40 transition-all hover:shadow-amber-500/60 active:scale-95"
+              className="cursor-pointer font-display rounded-3xl bg-gradient-to-r from-amber-500 to-orange-600 text-xl font-bold tracking-wide text-white shadow-2xl shadow-amber-500/40 transition-all hover:shadow-amber-500/60 active:scale-95"
               style={{ marginTop: "1rem", marginBottom: "1rem", padding: "3rem 5rem" }}
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.97 }}
@@ -117,7 +117,7 @@ export default function SetupScreen() {
           {isReady && (
             <motion.button
               onClick={() => setScreen("lobby")}
-              className="font-display rounded-3xl bg-gradient-to-r from-green-500 to-emerald-600 text-xl font-bold tracking-wide text-white shadow-2xl shadow-green-500/40 transition-all hover:shadow-green-500/60 active:scale-95"
+              className="cursor-pointer font-display rounded-3xl bg-gradient-to-r from-green-500 to-emerald-600 text-xl font-bold tracking-wide text-white shadow-2xl shadow-green-500/40 transition-all hover:shadow-green-500/60 active:scale-95"
               style={{ marginTop: "1rem", marginBottom: "1rem", padding: "3rem 5rem" }}
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.97 }}

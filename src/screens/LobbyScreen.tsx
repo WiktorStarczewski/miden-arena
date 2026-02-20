@@ -70,7 +70,7 @@ export default function LobbyScreen() {
                     setMode("host");
                     host();
                   }}
-                  className="font-display rounded-xl bg-gradient-to-b from-purple-500/80 to-purple-700/80 p-6 text-center font-bold text-white shadow-lg active:scale-95"
+                  className="cursor-pointer font-display rounded-xl bg-gradient-to-b from-purple-500/80 to-purple-700/80 p-6 text-center font-bold text-white shadow-lg active:scale-95"
                   whileHover={{ scale: 1.03 }}
                   whileTap={{ scale: 0.97 }}
                 >
@@ -80,7 +80,7 @@ export default function LobbyScreen() {
 
                 <motion.button
                   onClick={() => setMode("join")}
-                  className="font-display rounded-xl bg-gradient-to-b from-cyan-500/80 to-cyan-700/80 p-6 text-center font-bold text-white shadow-lg active:scale-95"
+                  className="cursor-pointer font-display rounded-xl bg-gradient-to-b from-cyan-500/80 to-cyan-700/80 p-6 text-center font-bold text-white shadow-lg active:scale-95"
                   whileHover={{ scale: 1.03 }}
                   whileTap={{ scale: 0.97 }}
                 >
@@ -106,7 +106,7 @@ export default function LobbyScreen() {
                 </motion.div>
                 <button
                   onClick={() => setMode("choose")}
-                  className="text-xs text-gray-500 underline"
+                  className="cursor-pointer text-xs text-gray-500 underline"
                 >
                   Cancel
                 </button>
@@ -132,7 +132,7 @@ export default function LobbyScreen() {
                 <motion.button
                   onClick={() => join(joinInput)}
                   disabled={!joinInput || isWaiting}
-                  className="w-full rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 py-3 font-bold text-white shadow-lg disabled:opacity-50 active:scale-95"
+                  className="cursor-pointer w-full rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 py-3 font-bold text-white shadow-lg disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                 >
@@ -143,7 +143,7 @@ export default function LobbyScreen() {
                 )}
                 <button
                   onClick={() => setMode("choose")}
-                  className="block w-full text-center text-xs text-gray-500 underline"
+                  className="cursor-pointer block w-full text-center text-xs text-gray-500 underline"
                 >
                   Cancel
                 </button>

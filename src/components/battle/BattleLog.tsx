@@ -64,7 +64,7 @@ export default function BattleLog({ log }: BattleLogProps) {
       {/* Collapsed header / toggle */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full text-left"
+        className="w-full text-left cursor-pointer"
       >
         <GlassPanel
           compact
