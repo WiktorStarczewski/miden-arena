@@ -59,8 +59,8 @@ export default function DraftScreen() {
              Critical: inline styles ensure Canvas gets correct dimensions
              on first paint, before Tailwind CSS loads. */}
         <div
-          className="relative flex-shrink-0"
-          style={{ height: "50vh", width: "calc(100% + 1.5rem)", margin: "-0.75rem -0.75rem 0" }}
+          className="relative flex-shrink-0 h-[37.5vh] sm:h-[50vh]"
+          style={{ width: "calc(100% + 1.5rem)", margin: "-0.75rem -0.75rem 0" }}
         >
           <DraftStage
             championId={previewId}
