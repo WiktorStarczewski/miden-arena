@@ -10,6 +10,7 @@ import { Group, Color, DataTexture, NearestFilter, RedFormat, Mesh } from "three
 import ChampionModel from "./ChampionModel";
 import ElementalAura from "./ElementalAura";
 import PostProcessing from "./PostProcessing";
+import DraftBackground from "./DraftBackground";
 
 // TYPES
 // ================================================================================================
@@ -224,7 +225,8 @@ const DraftSceneContent = React.memo(function DraftSceneContent({
   onRotate = true,
   element,
   dragDeltaX,
-}: DraftStageProps & { dragDeltaX: number }) {
+  mousePosition,
+}: DraftStageProps & { dragDeltaX: number; mousePosition: React.RefObject<{ x: number; y: number }> }) {
   const elementColor = element
     ? ELEMENT_COLORS[element] ?? DEFAULT_COLOR
     : DEFAULT_COLOR;
@@ -233,7 +235,9 @@ const DraftSceneContent = React.memo(function DraftSceneContent({
     <>
       {/* Background */}
       <fog attach="fog" args={["#12121e", 6, 18]} />
-      <color attach="background" args={["#12121e"]} />
+
+      {/* Themed parallax background */}
+      <DraftBackground championId={championId} mousePosition={mousePosition} />
 
       {/* Environment */}
       <Environment preset="night" />
@@ -286,16 +290,26 @@ const DraftSceneContent = React.memo(function DraftSceneContent({
 const DraftStage = React.memo(function DraftStage(props: DraftStageProps) {
   const [dpr, setDpr] = useState(1.5);
   const [dragDeltaX, setDragDeltaX] = useState(0);
+  const mousePosition = useRef({ x: 0, y: 0 });
   const isDragging = useRef(false);
   const lastPointerX = useRef(0);
+  const cachedRect = useRef<DOMRect | null>(null);
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     isDragging.current = true;
     lastPointerX.current = e.clientX;
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    cachedRect.current = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }, []);
 
   const onPointerMove = useCallback((e: React.PointerEvent) => {
+    // Track mouse position for parallax (normalized -1 to 1)
+    const rect = cachedRect.current ?? (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const nx = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    const ny = -(((e.clientY - rect.top) / rect.height) * 2 - 1);
+    mousePosition.current.x = nx;
+    mousePosition.current.y = ny;
+
     if (!isDragging.current) return;
     const dx = e.clientX - lastPointerX.current;
     lastPointerX.current = e.clientX;
@@ -304,6 +318,7 @@ const DraftStage = React.memo(function DraftStage(props: DraftStageProps) {
 
   const onPointerUp = useCallback(() => {
     isDragging.current = false;
+    cachedRect.current = null;
     setDragDeltaX(0);
   }, []);
 
@@ -320,7 +335,7 @@ const DraftStage = React.memo(function DraftStage(props: DraftStageProps) {
       style={{
         width: "100%",
         height: "100%",
-        background: "#12121e",
+        background: "#0a0a14",
         cursor: isDragging.current ? "grabbing" : "grab",
       }}
       onPointerDown={onPointerDown}
@@ -334,7 +349,7 @@ const DraftStage = React.memo(function DraftStage(props: DraftStageProps) {
           onDecline={() => setDpr(1)}
         >
           <AdaptiveDpr pixelated />
-          <DraftSceneContent {...props} dragDeltaX={dragDeltaX} />
+          <DraftSceneContent {...props} dragDeltaX={dragDeltaX} mousePosition={mousePosition} />
         </PerformanceMonitor>
       </Suspense>
     </Canvas>

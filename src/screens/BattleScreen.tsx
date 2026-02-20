@@ -361,7 +361,7 @@ export default function BattleScreen() {
 
   return (
     <GameLayout title={`Round ${battle.round}`}>
-      <div className="relative flex h-full flex-col overflow-auto">
+      <div className="relative flex h-full flex-col overflow-hidden">
         {/* 3D Arena Scene — fills remaining space above the HUD */}
         <div
           className="relative flex-1"
