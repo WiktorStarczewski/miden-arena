@@ -61,7 +61,7 @@ export default function ChampionSelector({
               disabled={isKO}
               whileTap={!isKO ? { scale: 0.95 } : undefined}
               className={`
-                flex-shrink-0 snap-center w-[140px]
+                flex-shrink-0 snap-center w-24 sm:w-[210px]
                 touch-manipulation rounded-xl
                 border-2 transition-colors
                 ${isKO ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}
@@ -98,7 +98,7 @@ export default function ChampionSelector({
                     <span className="font-bold text-xs text-white/90 truncate">
                       {champion.name}
                     </span>
-                    <ElementBadge element={champion.element} size="sm" />
+                    <span className="hidden sm:inline"><ElementBadge element={champion.element} size="sm" /></span>
                   </div>
 
                   <HealthBar

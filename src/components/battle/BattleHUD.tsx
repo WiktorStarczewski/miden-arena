@@ -132,8 +132,8 @@ export default function BattleHUD({ onSubmitMove, children }: BattleHUDProps) {
         )}
       </div>
 
-      {/* Phase indicator */}
-      <div className="flex-shrink-0 px-4 my-2">
+      {/* Phase indicator — hidden on mobile to save space */}
+      <div className="hidden sm:block flex-shrink-0 px-4 my-2">
         <TurnPhaseIndicator phase={phase} />
       </div>
 
