@@ -85,7 +85,8 @@ export default function GameLayout({
     <div className="h-screen bg-[#0a0a1a] text-[#e0e0e0] flex flex-col overflow-hidden">
       {/* Top bar */}
       <header className="sticky top-0 z-50 px-3 pt-3">
-        <GlassPanel compact className="flex items-center justify-between">
+        <GlassPanel compact className="grid grid-cols-3 items-center">
+          {/* Left: back button + title */}
           <div className="flex items-center gap-3">
             {showBackButton && (
               <button
@@ -118,9 +119,13 @@ export default function GameLayout({
             )}
           </div>
 
-          {/* Quality toggle + Balance + Sync status */}
-          <div className="flex items-center gap-3">
+          {/* Center: quality toggle */}
+          <div className="flex justify-center">
             <QualityToggle />
+          </div>
+
+          {/* Right: Balance + Sync status */}
+          <div className="flex items-center justify-end gap-3">
             <BalanceDisplay />
             <span className="text-xs text-white/40">Miden Arena</span>
             <div className="relative flex items-center justify-center w-3 h-3">
