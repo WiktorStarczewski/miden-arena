@@ -16,7 +16,7 @@ const STEPS = [
 export default function SetupScreen() {
   const { step, midenFiAddress, sessionWalletId } = useGameStore((s) => s.setup);
   const setScreen = useGameStore((s) => s.setScreen);
-  const { connect, isReady, error, isExtensionDetected } = useSessionWallet();
+  const { connect, isReady, error, isDetecting } = useSessionWallet();
 
   const currentStepIndex = STEPS.findIndex((s) => s.key === step);
 
@@ -105,12 +105,24 @@ export default function SetupScreen() {
           {step === "idle" && (
             <motion.button
               onClick={connect}
-              className="cursor-pointer font-display rounded-3xl bg-gradient-to-r from-amber-500 to-orange-600 text-xl font-bold tracking-wide text-white shadow-2xl shadow-amber-500/40 transition-all hover:shadow-amber-500/60 active:scale-95"
+              disabled={isDetecting}
+              className="cursor-pointer font-display rounded-3xl bg-gradient-to-r from-amber-500 to-orange-600 text-xl font-bold tracking-wide text-white shadow-2xl shadow-amber-500/40 transition-all hover:shadow-amber-500/60 active:scale-95 disabled:cursor-wait disabled:opacity-70"
               style={{ marginTop: "1rem", marginBottom: "1rem", padding: "3rem 5rem" }}
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.97 }}
+              whileHover={isDetecting ? {} : { scale: 1.03 }}
+              whileTap={isDetecting ? {} : { scale: 0.97 }}
             >
-              {isExtensionDetected ? "Connect MidenFi Wallet" : "Connect MidenFi Wallet"}
+              {isDetecting ? (
+                <span className="flex items-center gap-3">
+                  <motion.span
+                    className="inline-block h-5 w-5 rounded-full border-2 border-white/30 border-t-white"
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
+                  />
+                  Detecting Wallet...
+                </span>
+              ) : (
+                "Connect MidenFi Wallet"
+              )}
             </motion.button>
           )}
 
