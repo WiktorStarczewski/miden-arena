@@ -2,7 +2,7 @@
 
 **Provably fair on-chain card battles — powered by Miden, the Privacy Blockchain.**
 
-Miden Arena is a fully on-chain, two-player tactical combat game built on top of the [Miden](https://polygon.technology/polygon-miden) rollup. Two players draft teams of three champions from a shared pool of ten, then battle head-to-head in a turn-based commit-reveal combat system. Every move, every draft pick, and every stake transfer is transmitted as a Miden note — there is **no backend server**. The entire multiplayer protocol runs peer-to-peer through the blockchain's UTXO note model.
+Miden Arena is a fully on-chain, two-player tactical combat game built on top of the [Miden](https://polygon.technology/polygon-miden) rollup. Two players draft teams of three champions from a shared pool of ten, then battle head-to-head in a turn-based commit-reveal combat system. Every move and every draft pick is transmitted as a Miden note — there is **no backend server**. The entire multiplayer protocol runs peer-to-peer through the blockchain's UTXO note model.
 
 ---
 
@@ -36,7 +36,7 @@ Miden Arena is a fully on-chain, two-player tactical combat game built on top of
   - [Reveal Phase](#reveal-phase)
   - [Verification](#verification)
   - [NoteAttachment Transport](#noteattachment-transport)
-- [Staking](#staking)
+- [Staking (Planned)](#staking-planned)
 - [Miden Blockchain Integration](#miden-blockchain-integration)
   - [Session Wallet Architecture](#session-wallet-architecture)
   - [Note-Based Multiplayer](#note-based-multiplayer)
@@ -48,6 +48,7 @@ Miden Arena is a fully on-chain, two-player tactical combat game built on top of
   - [Attack Effects](#attack-effects)
   - [Elemental Auras](#elemental-auras)
   - [Post-Processing](#post-processing)
+- [Audio System](#audio-system)
 - [State Management](#state-management)
 - [Persistence](#persistence)
 - [Testing](#testing)
@@ -61,11 +62,12 @@ Miden Arena is a fully on-chain, two-player tactical combat game built on top of
 - **10 unique champions** across 4 elements (Fire, Water, Earth, Wind), each with 2 abilities
 - **Snake draft** (A-B-B-A-A-B) from a shared pool of 10 — every pick matters
 - **Cryptographic commit-reveal combat** — neither player can cheat or see the other's move before committing
-- **On-chain staking** — 10 MIDEN per player, winner takes all (20 MIDEN)
+- **Staking (planned)** — 10 MIDEN per player, winner takes all; see [VerificationService.md](./VerificationService.md) for the trustless escrow design
 - **Zero backend** — all communication via Miden blockchain notes; no WebSocket server, no matchmaking service
 - **3D champion previews and battle scenes** — Three.js with cel-shaded toon materials, per-element projectiles, camera shake, bloom, and particle effects
 - **Responsive design** — works on desktop and mobile with adaptive UI layouts
 - **Session wallet** — one browser popup per entire game session; all subsequent transactions are automatic
+- **Sound system** — music playlists per screen (menu, draft, battle), SFX for game events, and per-champion voice announcements
 - **61 unit tests** covering damage calculation, combat resolution, commitment cryptography, move encoding, draft logic, and full protocol integration
 
 ---
@@ -133,14 +135,24 @@ miden-arena/
 ├── vite.config.ts                  # Vite config with WASM dedup, CORS proxy
 ├── tsconfig.json                   # TypeScript configuration
 ├── tailwind.config.ts              # Tailwind CSS configuration
+├── VerificationService.md          # Planned trustless staking architecture
 │
 ├── public/
-│   └── models/                     # GLB champion models + animation files
-│       ├── inferno.glb
-│       ├── inferno.idle.glb
-│       ├── inferno.attack1.glb
-│       ├── inferno.hit_reaction.glb
-│       └── ... (per champion)
+│   ├── models/                     # GLB champion models + animation files
+│   │   ├── inferno.glb
+│   │   ├── inferno.idle.glb
+│   │   ├── inferno.attack1.glb
+│   │   ├── inferno.hit_reaction.glb
+│   │   └── ... (per champion)
+│   └── audio/
+│       ├── music/                  # Playlist tracks (m4a)
+│       │   ├── menu_1.m4a … menu_3.m4a
+│       │   ├── draft_1.m4a, draft_2.m4a
+│       │   └── battle_1.m4a … battle_3.m4a
+│       ├── sfx/                    # Sound effects (m4a)
+│       │   └── attack, hit, ko, select, pick, confirm, victory, defeat
+│       └── voices/                 # Per-champion name announcements (m4a)
+│           └── inferno, boulder, ember, ... (10 files)
 │
 └── src/
     ├── main.tsx                    # React root mount
@@ -161,6 +173,7 @@ miden-arena/
     │
     ├── scenes/                     # Three.js 3D scenes
     │   ├── DraftStage.tsx          # Rotating champion pedestal
+    │   ├── DraftBackground.tsx     # Per-champion parallax background
     │   ├── ArenaScene.tsx          # Battle arena with 2 champions
     │   ├── ChampionModel.tsx       # GLB loader with animation system
     │   ├── AttackEffect.tsx        # Projectile + impact VFX
@@ -210,6 +223,9 @@ miden-arena/
     │       ├── draft.test.ts      # 7+ tests
     │       └── protocol.test.ts   # 40 tests (full integration)
     │
+    ├── audio/
+    │   └── audioManager.ts         # Singleton audio: music playlists, SFX, voices
+    │
     ├── hooks/                     # React hooks for game systems
     │   ├── useSessionWallet.ts    # Wallet setup flow
     │   ├── useMatchmaking.ts      # Host/join protocol
@@ -257,7 +273,7 @@ A 5-step progress wizard:
 
 1. **Connect Wallet** — opens the Miden browser extension popup to approve the connection
 2. **Create Session Wallet** — generates a local Falcon-512 key pair via the Miden client. This session wallet is used for all subsequent in-game transactions without additional popups
-3. **Fund Session (15 MIDEN)** — the MidenFi wallet sends 15,000,000 microtokens to the session wallet (10M stake + 5M protocol buffer)
+3. **Fund Session (15 MIDEN)** — the MidenFi wallet sends 15,000,000 microtokens to the session wallet for protocol note fees (matchmaking, draft picks, commit-reveal moves)
 4. **Claim Funds** — the session wallet consumes the incoming funding note (polled every 3 seconds)
 5. **Ready** — "Enter Lobby" button appears
 
@@ -322,7 +338,6 @@ The results screen shows:
 - **VICTORY / DEFEAT / DRAW** banner
 - Total rounds played and surviving champions (X/3)
 - MVP panel highlighting the champion with the most total damage dealt
-- Automatic withdrawal: winner claims 20 MIDEN, draw returns 10 MIDEN each
 - "Play Again" and "Lobby" buttons (both reset game state)
 
 ---
@@ -524,22 +539,23 @@ The verifier reconstructs the hash from the revealed move + nonce parts and chec
 
 Game data is carried in **NoteAttachment** fields rather than token amounts. This was a critical design decision:
 
-**Problem with amount-based encoding**: Each turn required 5 notes totalling ~265,000 microtokens. After staking (10M sent), only ~5M remained as buffer. After ~19 turns the wallet would be empty and the winner couldn't send the prize note.
+**Problem with amount-based encoding**: Each turn required 5 notes totalling ~265,000 microtokens. With only ~15M in the session wallet, the wallet would be drained after relatively few turns.
 
-**Solution**: Protocol notes carry a fixed `1n` amount with game data in the attachment's `FeltArray`:
+**Solution**: Protocol notes carry a fixed `1n` amount with game data in the attachment's Word:
 
 **Commit note** (1 note, amount `1n`):
 ```
-FeltArray([
+Word([
   Felt(1n),          // MSG_TYPE_COMMIT
   Felt(hashPart1),   // 16-bit hash chunk
   Felt(hashPart2),   // 16-bit hash chunk
+  Felt(0n),          // padding
 ])
 ```
 
 **Reveal note** (1 note, amount `1n`):
 ```
-FeltArray([
+Word([
   Felt(2n),              // MSG_TYPE_REVEAL
   Felt(move),            // raw move (1-20)
   Felt(noncePart1),      // raw nonce uint16
@@ -547,19 +563,23 @@ FeltArray([
 ])
 ```
 
+Notes use `NoteAttachment.newWord()` (Word = 4 felts, no advice map) to avoid a bug in miden-standards 0.13.x that affected Array attachments.
+
 This reduces wallet drain from ~265,000 per turn to just **2n per turn** (1 commit + 1 reveal note), making games of 50+ turns viable.
 
 ---
 
-## Staking
+## Staking (Planned)
 
-Both players stake **10 MIDEN** (10,000,000 microtokens) at the start of each match using P2IDE (Pay-to-ID with Expiry) notes:
+Staking is **not yet active**. The `useStaking` hook exists with `sendStake()` and `withdraw()` fully coded, but staking is not wired into the game flow — `sendStake()` is never called, so the 15 MIDEN funded to the session wallet stays untouched during gameplay.
 
-- Stake amount: `10,000,000n` microtokens
-- Recall block offset: `200` blocks (the sender can reclaim if unclaimed)
-- Winner receives `20,000,000n` (both stakes)
-- Draw returns `10,000,000n` to each player
-- Withdrawal happens automatically on the Game Over screen
+The current peer-to-peer staking design (each player sends 10 MIDEN directly to the other) has a fundamental trust issue: since combat resolution is client-side, there is no on-chain enforcement of who won. A trustless solution requires an escrow account + verification service.
+
+See **[VerificationService.md](./VerificationService.md)** for the planned architecture:
+- Both players stake to an on-chain escrow account
+- A verification service reads public commit-reveal notes, replays the deterministic combat engine, and attests the winner
+- The escrow releases the pot based on the service's signed attestation
+- Timeout refund protects against service downtime or player abandonment
 
 ---
 
@@ -571,7 +591,7 @@ Miden Arena uses a **session wallet** pattern to avoid repeated browser extensio
 
 1. User connects their MidenFi wallet (browser extension) — **one popup**
 2. App creates a local session wallet (Falcon-512 keypair) via the Miden client SDK
-3. MidenFi sends 15 MIDEN to the session wallet (10 stake + 5 buffer)
+3. MidenFi sends 15 MIDEN to the session wallet (protocol note budget)
 4. All subsequent game transactions (draft picks, commits, reveals, stakes) are sent from the session wallet automatically — **zero popups**
 5. At game end, remaining funds are sent back to MidenFi
 
@@ -587,7 +607,7 @@ Every game action is a Miden note sent from one player's session wallet to the o
 | Draft pick | `1n–10n` (championId + 1) | None |
 | Commit move | `1n` | `[MSG_TYPE_COMMIT, hashPart1, hashPart2]` |
 | Reveal move | `1n` | `[MSG_TYPE_REVEAL, move, noncePart1, noncePart2]` |
-| Stake | `10,000,000n` | None |
+| Stake (planned) | `10,000,000n` | None |
 
 Notes are detected by polling `useNotes({ status: "committed" })` from the Miden React SDK, filtered by sender (opponent's account ID). A deduplication system tracks handled note IDs to prevent re-processing.
 
@@ -620,7 +640,7 @@ POOL_SIZE   = 10
 MIDEN_FAUCET_ID       = "mtst1aqmat9m63ctdsgz6xcyzpuprpulwk9vg_qruqqypuyph"
 MIDEN_DECIMALS        = 6
 STAKE_AMOUNT          = 10_000_000n   // 10 MIDEN
-FUND_AMOUNT           = 15_000_000n   // 15 MIDEN (stake + buffer)
+FUND_AMOUNT           = 15_000_000n   // 15 MIDEN (protocol note budget)
 RECALL_BLOCK_OFFSET   = 200
 PROTOCOL_NOTE_AMOUNT  = 1n
 ```
@@ -639,6 +659,13 @@ The draft preview renders a single champion on a glowing pedestal:
 - **Pedestal**: Cylinder base + accent ring in element color + inner glowing disc
 - **Lighting**: Top spotlight, front directional, back rim light, element-colored point light below the model
 - **Environment**: Night preset with bloom (intensity 0.6) and vignette
+- **Per-champion themed background** (`DraftBackground`): Multi-layer parallax scene unique to each champion:
+  - **Gradient sky** — two-tone color wash (custom ShaderMaterial with `topColor`/`bottomColor` uniforms)
+  - **Midground silhouettes** — procedural BufferGeometry shapes (peaks, waves, dunes, crystals, clouds, coral, rays, tentacles) in dark tints
+  - **Atmospheric particles** — floating embers, dust motes, rain, bubbles, etc. using Points with AdditiveBlending
+  - **Mouse-reactive parallax** — 3 depth layers shift at different rates based on pointer position (back ±0.1, mid ±0.3, front ±0.5)
+  - **Smooth crossfade** — colors and parameters lerp over ~1 second when switching champions
+  - All 10 champions have visually distinct themes (e.g., Inferno: volcanic peaks + rising embers; Kraken: abyss + bioluminescent dots; Storm: thunderclouds + lightning)
 
 ### Battle Arena
 
@@ -713,6 +740,45 @@ Applied via `@react-three/postprocessing`:
 - **Bloom**: Configurable intensity (0.6 in draft, 0.8 in battle), luminance threshold 0.6
 - **Vignette**: Subtle edge darkening when enabled
 - **Hit flash**: Brief white overlay triggered on attack impact
+
+---
+
+## Audio System
+
+The game uses a singleton audio manager (`src/audio/audioManager.ts`) built on the Web Audio API. `initAudio()` must be called from a user gesture (triggered on the PLAY button) to satisfy browser autoplay policies. All audio functions are wrapped in try-catch — failures never crash the game.
+
+### Music
+
+Music is organised as **playlists** per screen. Tracks play sequentially within a playlist, looping back to the first when the last ends. Switching screens crossfades between playlists (1.5s fade).
+
+| Screen | Tracks | Style |
+|--------|--------|-------|
+| Menu (title, setup, lobby) | `menu_1`, `menu_2`, `menu_3` | Lively dark waltz / driving |
+| Draft | `draft_1`, `draft_2` | Dark, brooding |
+| Battle | `battle_1`, `battle_2`, `battle_3` | Epic orchestral / intense |
+
+Music plays at 40% master volume. The next track in the playlist is eagerly preloaded to avoid loading gaps.
+
+### Sound Effects
+
+One-shot SFX that support overlapping (each play creates a fresh `AudioBufferSourceNode`):
+
+| SFX | Trigger |
+|-----|---------|
+| `attack` | Attack animation start |
+| `hit` | Attack impact |
+| `ko` | Champion knocked out |
+| `select` | UI selection |
+| `pick` | Draft champion picked |
+| `confirm` | Move confirmed |
+| `victory` | Game won |
+| `defeat` | Game lost |
+
+### Voice Announcements
+
+Each champion has a name voice clip (`/audio/voices/{name}.m4a`) played when hovering over a champion in the draft pool. Only one voice clip plays at a time — starting a new one stops the current.
+
+All audio files are `.m4a` format under `public/audio/`.
 
 ---
 
