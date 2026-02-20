@@ -4,12 +4,13 @@ import { useGLTF, useAnimations } from "@react-three/drei";
 import {
   Group,
   Mesh,
-  MeshToonMaterial,
   DataTexture,
   NearestFilter,
+  RedFormat,
   Color,
   SkinnedMesh,
 } from "three";
+import { getChampion } from "../constants/champions";
 
 // TYPES
 // ================================================================================================
@@ -30,7 +31,7 @@ function createGradientMap(steps: number = 4): DataTexture {
   for (let i = 0; i < steps; i++) {
     colors[i] = Math.round((i / (steps - 1)) * 255);
   }
-  const texture = new DataTexture(colors, steps, 1);
+  const texture = new DataTexture(colors, steps, 1, RedFormat);
   texture.magFilter = NearestFilter;
   texture.minFilter = NearestFilter;
   texture.needsUpdate = true;
@@ -84,38 +85,42 @@ const LoadedModel = React.memo(function LoadedModel({
   position,
   side,
   animation,
-  elementColor,
+  elementColor: _elementColor,
 }: ChampionModelProps) {
   const groupRef = useRef<Group>(null);
-  const modelPath = `/models/champion_${championId}.glb`;
-  const { scene, animations } = useGLTF(modelPath);
-  const { actions, mixer } = useAnimations(animations, groupRef);
-  const gradientMap = useMemo(() => createGradientMap(), []);
+  const champion = getChampion(championId);
+  const modelPath = champion.modelPath;
 
-  // Apply toon material to all meshes in the model
+  // Derive animation file path: /models/ember.glb + "idle" → /models/ember.idle.glb
+  const animPath = modelPath.replace(".glb", `.${animation}.glb`);
+
+  const { scene, animations: modelAnims } = useGLTF(modelPath);
+  const { animations: externalAnims } = useGLTF(animPath);
+
+  // Merge clips: prefer external animation file, fall back to embedded clips
+  const allAnimations = useMemo(
+    () => [...externalAnims, ...modelAnims],
+    [externalAnims, modelAnims],
+  );
+
+  const { actions, mixer } = useAnimations(allAnimations, groupRef);
+
+  // Force champion into the opaque render pass so aura rings stay behind
   useEffect(() => {
-    const toonColor = new Color(elementColor);
     scene.traverse((child) => {
-      if (
-        child instanceof Mesh ||
-        child instanceof SkinnedMesh
-      ) {
-        const original = child.material as { map?: unknown; color?: Color };
-        const toonMat = new MeshToonMaterial({
-          color: original.color ?? toonColor,
-          gradientMap,
-          emissive: toonColor,
-          emissiveIntensity: 0.08,
-        });
-        if (original.map) {
-          (toonMat as unknown as { map: unknown }).map = original.map;
-        }
-        child.material = toonMat;
+      if (child instanceof Mesh || child instanceof SkinnedMesh) {
         child.castShadow = true;
         child.receiveShadow = true;
+        const mats = Array.isArray(child.material)
+          ? child.material
+          : [child.material];
+        for (const mat of mats) {
+          mat.depthWrite = true;
+          mat.transparent = false;
+        }
       }
     });
-  }, [scene, elementColor, gradientMap]);
+  }, [scene]);
 
   // Play the requested animation
   useEffect(() => {
@@ -151,9 +156,12 @@ const LoadedModel = React.memo(function LoadedModel({
     }
   }, [animation, actions, mixer]);
 
-  // Mirror the model for the right side so champions face each other
+  // Rotate champions to face each other. Pure facing would be ±π/2
+  // (profile to camera), so we use ±π/3 (~60°) for a 3/4 view where
+  // they clearly face each other while remaining visible from the front.
+  // Mirror X on the right side for a flipped fighting stance.
   const scaleX = side === "right" ? -1 : 1;
-  const rotationY = side === "right" ? Math.PI : 0;
+  const rotationY = side === "left" ? Math.PI / 3 : -Math.PI / 3;
 
   return (
     <group
@@ -183,7 +191,7 @@ const ChampionModel = React.memo(function ChampionModel(
         />
       }
     >
-      <LoadedModel {...props} />
+      <LoadedModel key={props.championId} {...props} />
     </React.Suspense>
   );
 });

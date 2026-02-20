@@ -18,9 +18,9 @@ function makeState(championId: number): ChampionState {
 
 describe("calculateDamage", () => {
   it("calculates basic damage correctly", () => {
-    const ember = CHAMPIONS[0]; // Fire, ATK 16
-    const boulder = CHAMPIONS[2]; // Earth, DEF 16
-    const boulderState = makeState(2);
+    const ember = CHAMPIONS[2]; // Ember: Fire, ATK 16
+    const boulder = CHAMPIONS[1]; // Boulder: Earth, DEF 16
+    const boulderState = makeState(1);
     const ability = ember.abilities[0]; // Fireball: 25 power
 
     const { damage, typeMultiplier } = calculateDamage(
@@ -39,9 +39,9 @@ describe("calculateDamage", () => {
   });
 
   it("applies element disadvantage", () => {
-    const ember = CHAMPIONS[0]; // Fire
-    const torrent = CHAMPIONS[1]; // Water
-    const torrentState = makeState(1);
+    const ember = CHAMPIONS[2]; // Ember: Fire
+    const torrent = CHAMPIONS[3]; // Torrent: Water, DEF 12
+    const torrentState = makeState(3);
     const ability = ember.abilities[0]; // Fireball: 25 power
 
     const { damage, typeMultiplier } = calculateDamage(
@@ -52,7 +52,7 @@ describe("calculateDamage", () => {
       [],
     );
 
-    // baseDamage = 25 * 1.8 = 45
+    // baseDamage = 25 * (1 + 16/20) = 25 * 1.8 = 45
     // Fire vs Water = 0.67x
     // finalDamage = max(1, floor(45 * 0.67 - 12)) = max(1, floor(18.15)) = 18
     expect(typeMultiplier).toBe(0.67);
@@ -60,9 +60,9 @@ describe("calculateDamage", () => {
   });
 
   it("applies neutral matchup", () => {
-    const ember = CHAMPIONS[0]; // Fire
-    const gale = CHAMPIONS[3]; // Wind
-    const galeState = makeState(3);
+    const ember = CHAMPIONS[2]; // Ember: Fire
+    const gale = CHAMPIONS[4]; // Gale: Wind
+    const galeState = makeState(4);
     const ability = ember.abilities[0]; // Fireball: 25 power
 
     const { typeMultiplier } = calculateDamage(
@@ -78,11 +78,11 @@ describe("calculateDamage", () => {
   });
 
   it("respects defense buffs", () => {
-    const ember = CHAMPIONS[0];
-    const boulder = CHAMPIONS[2];
-    const boulderState = makeState(2);
+    const ember = CHAMPIONS[2]; // Ember: Fire, ATK 16
+    const boulder = CHAMPIONS[1]; // Boulder: Earth, DEF 16
+    const boulderState = makeState(1);
     boulderState.buffs = [{ type: "defense", value: 6, turnsRemaining: 2, isDebuff: false }];
-    const ability = ember.abilities[0];
+    const ability = ember.abilities[0]; // Fireball: 25 power
 
     const { damage: damageWithBuff } = calculateDamage(
       ember,
@@ -98,10 +98,10 @@ describe("calculateDamage", () => {
   });
 
   it("respects attack debuffs on attacker", () => {
-    const ember = CHAMPIONS[0]; // ATK 16
-    const boulder = CHAMPIONS[2];
-    const boulderState = makeState(2);
-    const ability = ember.abilities[0];
+    const ember = CHAMPIONS[2]; // Ember: Fire, ATK 16
+    const boulder = CHAMPIONS[1]; // Boulder: Earth, DEF 16
+    const boulderState = makeState(1);
+    const ability = ember.abilities[0]; // Fireball: 25 power
 
     const attackDebuff = [{ type: "attack" as const, value: 4, turnsRemaining: 2, isDebuff: true }];
 
@@ -160,7 +160,7 @@ describe("calculateDamage", () => {
 
 describe("calculateBurnDamage", () => {
   it("calculates 10% of max HP", () => {
-    const state = makeState(0); // Ember: 90 HP
+    const state = makeState(2); // Ember: 90 HP
     expect(calculateBurnDamage(state)).toBe(9);
   });
 

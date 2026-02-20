@@ -1,13 +1,15 @@
-import { type ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useGameStore } from "../../store/gameStore";
 import { getChampion } from "../../constants/champions";
+import { playSfx } from "../../audio/audioManager";
 import GlassPanel from "../layout/GlassPanel";
 import HealthBar from "../ui/HealthBar";
 import ElementBadge from "../ui/ElementBadge";
 import StatusEffectIcon from "../ui/StatusEffectIcon";
 import AbilityCard from "../ui/AbilityCard";
 import TurnPhaseIndicator from "../ui/TurnPhaseIndicator";
+import ChampionSelector from "./ChampionSelector";
 import type { Champion, ChampionState, TurnAction } from "../../types/game";
 
 interface BattleHUDProps {
@@ -78,8 +80,7 @@ function FighterPanel({
 
 export default function BattleHUD({ onSubmitMove, children }: BattleHUDProps) {
   const battle = useGameStore((state) => state.battle);
-
-  if (!battle) return null;
+  const selectChampion = useGameStore((state) => state.selectChampion);
 
   const {
     phase,
@@ -88,6 +89,18 @@ export default function BattleHUD({ onSubmitMove, children }: BattleHUDProps) {
     myChampions,
     opponentChampions,
   } = battle;
+
+  // Auto-select the first surviving champion when entering the choosing phase
+  useEffect(() => {
+    if (phase !== "choosing") return;
+    // If no champion selected, or current selection is KO'd, pick the first alive
+    const currentValid = selectedChampion != null &&
+      myChampions.some((c) => c.id === selectedChampion && !c.isKO);
+    if (!currentValid) {
+      const survivor = myChampions.find((c) => !c.isKO);
+      if (survivor) selectChampion(survivor.id);
+    }
+  }, [phase, selectedChampion, myChampions, selectChampion]);
 
   // Find the active (selected or first surviving) champion for each side
   const myChampionState = selectedChampion != null
@@ -119,16 +132,13 @@ export default function BattleHUD({ onSubmitMove, children }: BattleHUDProps) {
         )}
       </div>
 
-      {/* Arena area - middle, expandable */}
-      <div className="flex-1 relative flex items-center justify-center min-h-0">
-        {/* Phase indicator - floating center */}
-        <div className="absolute top-2 left-0 right-0 z-20 px-4">
-          <TurnPhaseIndicator phase={phase} />
-        </div>
-
-        {/* Arena content slot */}
-        <div className="w-full h-full">{children}</div>
+      {/* Phase indicator — hidden on mobile to save space */}
+      <div className="hidden sm:block flex-shrink-0 px-4 my-2">
+        <TurnPhaseIndicator phase={phase} />
       </div>
+
+      {/* Arena content slot */}
+      {children && <div className="flex-1 min-h-0">{children}</div>}
 
       {/* My info + abilities - bottom */}
       <div className="flex-shrink-0 px-1 mt-2">
@@ -140,7 +150,7 @@ export default function BattleHUD({ onSubmitMove, children }: BattleHUDProps) {
           />
         )}
 
-        {/* Ability cards - bottom sheet style on mobile */}
+        {/* Champion selector + Ability cards - bottom sheet style on mobile */}
         {myChampion && (
           <AnimatePresence>
             {isChoosing && (
@@ -151,6 +161,20 @@ export default function BattleHUD({ onSubmitMove, children }: BattleHUDProps) {
                 transition={{ duration: 0.25, ease: "easeOut" }}
                 className="mt-2"
               >
+                {/* Champion selector — only show when multiple champions alive */}
+                {myChampions.filter((c) => !c.isKO).length > 1 && (
+                  <div className="mb-2">
+                    <ChampionSelector
+                      champions={myChampions}
+                      selectedId={selectedChampion}
+                      onSelect={(id) => {
+                        selectChampion(id);
+                        // Reset ability selection when switching champion
+                        useGameStore.getState().selectAbility(null);
+                      }}
+                    />
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-2 md:flex md:gap-3">
                   {myChampion.abilities.map((ability, i) => (
                     <AbilityCard
@@ -168,31 +192,31 @@ export default function BattleHUD({ onSubmitMove, children }: BattleHUDProps) {
                     />
                   ))}
                 </div>
-
-                {/* Confirm button */}
-                {selectedAbility !== null && selectedAbility !== undefined && (
-                  <motion.button
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="
-                      w-full mt-2 py-3 rounded-xl font-bold text-sm uppercase tracking-wider
-                      bg-amber-500/20 border border-amber-400/40 text-amber-300
-                      hover:bg-amber-500/30 active:scale-[0.98]
-                      transition-all duration-200
-                    "
-                    onClick={() => {
-                      if (onSubmitMove && selectedChampion != null && selectedAbility != null) {
-                        onSubmitMove({ championId: selectedChampion, abilityIndex: selectedAbility });
-                      }
-                    }}
-                  >
-                    Confirm Move
-                  </motion.button>
-                )}
               </motion.div>
             )}
           </AnimatePresence>
         )}
+
+        {/* Confirm button — always visible so it contributes to layout */}
+        <button
+          disabled={!isChoosing || selectedAbility == null}
+          className={`
+            w-full mt-3 mb-2 py-3 rounded-xl font-display font-bold text-sm uppercase tracking-wider
+            border transition-all duration-200
+            ${isChoosing && selectedAbility != null
+              ? "bg-amber-500/20 border-amber-400/40 text-amber-300 hover:bg-amber-500/30 active:scale-[0.98] cursor-pointer"
+              : "bg-white/5 border-white/10 text-white/25 cursor-not-allowed"
+            }
+          `}
+          onClick={() => {
+            if (onSubmitMove && selectedChampion != null && selectedAbility != null) {
+              playSfx("confirm");
+              onSubmitMove({ championId: selectedChampion, abilityIndex: selectedAbility });
+            }
+          }}
+        >
+          {isChoosing ? "Confirm Move" : "Choose your move"}
+        </button>
       </div>
     </div>
   );

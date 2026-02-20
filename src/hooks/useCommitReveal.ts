@@ -6,21 +6,37 @@
  *  **Commit phase:**
  *   1. Player picks a move (encoded as 1-20).
  *   2. A random nonce is generated and SHA-256(move || nonce) is computed.
- *   3. The first 96 bits of the hash are split into 2 x 48-bit values.
- *   4. Two notes are sent to the opponent carrying these hash parts.
+ *   3. The first 32 bits of the hash are split into 2 × 16-bit values.
+ *   4. One note is sent with amount=1 and a NoteAttachment carrying
+ *      [MSG_TYPE_COMMIT, hashPart1, hashPart2].
  *
  *  **Reveal phase:**
- *   1. Three notes are sent: the move (1-20), and 2 x 32-bit nonce parts.
+ *   1. One note is sent with amount=1 and a NoteAttachment carrying
+ *      [MSG_TYPE_REVEAL, move, noncePart1, noncePart2].
  *   2. The opponent reconstructs the nonce, recomputes the hash, and checks
  *      that it matches the committed values.
  *
- * This prevents either player from changing their move after seeing the
- * opponent's choice, achieving fair simultaneous-move semantics on an
- * asynchronous blockchain.
+ * Data is carried in NoteAttachment (not token amounts), reducing wallet
+ * drain to ~2n per turn instead of ~265K.
  */
 
-import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import { useMultiSend } from "@miden-sdk/react";
+import { useState, useCallback, useEffect, useRef } from "react";
+import { useTransaction, useSyncState } from "@miden-sdk/react";
+import {
+  AccountId,
+  FungibleAsset,
+  Note,
+  NoteAssets,
+  NoteAttachment,
+  NoteAttachmentKind,
+  NoteAttachmentScheme,
+  NoteType,
+  OutputNote,
+  OutputNoteArray,
+  TransactionRequestBuilder,
+  Word,
+} from "@miden-sdk/miden-sdk";
+import type { InputNoteRecord } from "@miden-sdk/miden-sdk";
 import { useGameStore } from "../store/gameStore";
 import { useNoteDecoder } from "./useNoteDecoder";
 import {
@@ -28,8 +44,8 @@ import {
   createReveal,
   verifyReveal,
 } from "../engine/commitment";
-import { MIDEN_FAUCET_ID } from "../constants/miden";
-import { COMMIT_CHUNK_MAX, NONCE_CHUNK_MAX, MOVE_MIN, MOVE_MAX } from "../constants/protocol";
+import { MIDEN_FAUCET_ID, PROTOCOL_NOTE_AMOUNT } from "../constants/miden";
+import { MSG_TYPE_COMMIT, MSG_TYPE_REVEAL } from "../constants/protocol";
 import type { CommitData, RevealData } from "../types";
 
 // ---------------------------------------------------------------------------
@@ -41,26 +57,92 @@ export interface UseCommitRevealReturn {
   commit: (move: number) => Promise<void>;
   /** Reveal our previously committed move by sending the move + nonce parts. */
   reveal: () => Promise<void>;
-  /** Verify that the opponent's reveal matches their commitment. */
-  verify: (
-    move: number,
-    noncePart1: bigint,
-    noncePart2: bigint,
-    commitPart1: bigint,
-    commitPart2: bigint,
-  ) => Promise<boolean>;
   /** Whether we have sent our commitment this turn. */
   isCommitted: boolean;
   /** Whether we have sent our reveal this turn. */
   isRevealed: boolean;
-  /** Whether the opponent has sent their 2 commit notes this turn. */
+  /** Whether the opponent has sent their commit note this turn. */
   opponentCommitted: boolean;
-  /** Whether the opponent has sent their 3 reveal notes this turn. */
+  /** Whether the opponent has sent their reveal note this turn. */
   opponentRevealed: boolean;
   /** The decoded opponent move (set after reveal verification). `null` until verified. */
   opponentMove: number | null;
   /** Error message if any step fails. */
   error: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Parse an AccountId from a bech32/hex string. */
+function parseId(id: string): AccountId {
+  try {
+    return AccountId.fromBech32(id);
+  } catch {
+    return AccountId.fromHex(id);
+  }
+}
+
+/** Build and send a single P2ID note with a Word attachment (4 felts). */
+async function sendAttachmentNote(
+  execute: ReturnType<typeof useTransaction>["execute"],
+  senderId: string,
+  targetId: string,
+  feltValues: bigint[],
+): Promise<void> {
+  const sender = parseId(senderId);
+  const target = parseId(targetId);
+  const faucet = parseId(MIDEN_FAUCET_ID);
+
+  // Pad to exactly 4 elements for a Word attachment.
+  // Word attachments don't require advice map entries (unlike Array),
+  // which avoids a bug in miden-standards 0.13.x.
+  const padded = [...feltValues];
+  while (padded.length < 4) padded.push(0n);
+  const word = new Word(BigUint64Array.from(padded));
+  const scheme = NoteAttachmentScheme.none();
+  const attachment = NoteAttachment.newWord(scheme, word);
+
+  const note = Note.createP2IDNote(
+    sender,
+    target,
+    new NoteAssets([new FungibleAsset(faucet, PROTOCOL_NOTE_AMOUNT)]),
+    NoteType.Public,
+    attachment,
+  );
+
+  const txRequest = new TransactionRequestBuilder()
+    .withOwnOutputNotes(new OutputNoteArray([OutputNote.full(note)]))
+    .build();
+
+  await execute({ accountId: senderId, request: txRequest });
+}
+
+/**
+ * Try to read the attachment from an InputNoteRecord.
+ * Returns felt values as bigint[] if the note has a Word or Array attachment, or null.
+ */
+function readAttachment(record: InputNoteRecord): bigint[] | null {
+  const meta = record.metadata();
+  if (!meta) return null;
+  const att = meta.attachment();
+  if (att.attachmentKind() === NoteAttachmentKind.None) return null;
+
+  // Word attachment (our current format)
+  const word = att.asWord();
+  if (word) {
+    const u64s = word.toU64s();
+    return [u64s[0], u64s[1], u64s[2], u64s[3]];
+  }
+
+  // Array attachment (legacy fallback)
+  const arr = att.asArray();
+  if (arr) {
+    return Array.from({ length: arr.length() }, (_, i) => arr.get(i).asInt());
+  }
+
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -71,53 +153,67 @@ export function useCommitReveal(): UseCommitRevealReturn {
   const sessionWalletId = useGameStore((s) => s.setup.sessionWalletId);
   const opponentId = useGameStore((s) => s.match.opponentId);
   const round = useGameStore((s) => s.battle.round);
+  const battleStaleNoteIds = useGameStore((s) => s.battle.staleNoteIds);
   const setMyCommit = useGameStore((s) => s.setMyCommit);
   const setOpponentCommitNotes = useGameStore((s) => s.setOpponentCommitNotes);
   const setMyReveal = useGameStore((s) => s.setMyReveal);
   const setOpponentReveal = useGameStore((s) => s.setOpponentReveal);
 
-  const { sendMany, stage } = useMultiSend();
-  const { commitNotes, revealNotes, allOpponentNotes } = useNoteDecoder(opponentId);
+  const { execute } = useTransaction();
+  const { sync } = useSyncState();
+  const { allOpponentNotes, rawOpponentNotes } = useNoteDecoder(opponentId);
 
   const [isCommitted, setIsCommitted] = useState(false);
   const [isRevealed, setIsRevealed] = useState(false);
+  const [opponentCommitted, setOpponentCommitted] = useState(false);
+  const [opponentRevealed, setOpponentRevealed] = useState(false);
   const [opponentMove, setOpponentMove] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Store the current commitment locally for the reveal step
   const commitDataRef = useRef<CommitData | null>(null);
 
-  // Track processed commit/reveal notes per round to avoid reprocessing
-  const lastProcessedRound = useRef<number>(0);
-  const commitProcessedRef = useRef(false);
-  const revealProcessedRef = useRef(false);
+  // ID-based note tracking: notes in this set are skipped.
+  // Initialised from battle staleNoteIds (all notes before battle started).
+  // Notes consumed as commits or reveals are added here so they're not
+  // reprocessed in later rounds.
+  const handledNoteIds = useRef(new Set(battleStaleNoteIds));
 
-  // Suppress unused lint for stage (useful for debugging)
-  void stage;
+  // Track which round we last reset for
+  const lastResetRound = useRef<number>(0);
 
   // -----------------------------------------------------------------------
   // Reset state when round changes
   // -----------------------------------------------------------------------
   useEffect(() => {
-    if (round !== lastProcessedRound.current) {
-      lastProcessedRound.current = round;
-      setIsCommitted(false);
-      setIsRevealed(false);
-      setOpponentMove(null);
-      setError(null);
-      commitDataRef.current = null;
-      commitProcessedRef.current = false;
-      revealProcessedRef.current = false;
+    if (round === lastResetRound.current) return;
+    lastResetRound.current = round;
+    setIsCommitted(false);
+    setIsRevealed(false);
+    setOpponentCommitted(false);
+    setOpponentRevealed(false);
+    setOpponentMove(null);
+    setError(null);
+    commitDataRef.current = null;
+    // Snapshot ALL current opponent notes as handled so that notes from
+    // previous rounds cannot be misclassified in the new round.
+    for (const note of allOpponentNotes) {
+      handledNoteIds.current.add(note.noteId);
     }
-  }, [round]);
+  }, [round, allOpponentNotes]);
 
   // -----------------------------------------------------------------------
-  // commit(move) - Generate commitment and send 2 hash-part notes
+  // commit(move) - Generate commitment and send 1 attachment note
   // -----------------------------------------------------------------------
   const commit = useCallback(
     async (move: number) => {
       if (isCommitted) {
         setError("Already committed this turn.");
+        return;
+      }
+
+      if (!sessionWalletId) {
+        setError("Session wallet not ready.");
         return;
       }
 
@@ -137,31 +233,37 @@ export function useCommitReveal(): UseCommitRevealReturn {
           part2: commitment.part2,
         };
 
-        // Send 2 notes: hash part1 and hash part2
-        await sendMany({
-          from: sessionWalletId!,
-          assetId: MIDEN_FAUCET_ID,
-          recipients: [
-            { to: opponentId, amount: commitment.part1 },
-            { to: opponentId, amount: commitment.part2 },
-          ],
-          noteType: "public",
-        });
+        // Sync wallet state before building tx to avoid stale commitment
+        await sync();
+
+        await sendAttachmentNote(
+          execute,
+          sessionWalletId,
+          opponentId,
+          [MSG_TYPE_COMMIT, commitment.part1, commitment.part2],
+        );
 
         commitDataRef.current = commitData;
         setMyCommit(commitData);
         setIsCommitted(true);
+
+        console.log("[useCommitReveal] commit sent", {
+          round,
+          part1: commitment.part1.toString(),
+          part2: commitment.part2.toString(),
+        });
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Failed to send commitment.";
+        console.error("[useCommitReveal] commit failed", err);
         setError(message);
       }
     },
-    [isCommitted, sessionWalletId, opponentId, sendMany, setMyCommit],
+    [isCommitted, sessionWalletId, opponentId, round, execute, sync, setMyCommit],
   );
 
   // -----------------------------------------------------------------------
-  // reveal() - Send 3 notes: move, noncePart1, noncePart2
+  // reveal() - Send 1 attachment note: move + nonce parts
   // -----------------------------------------------------------------------
   const reveal = useCallback(async () => {
     if (isRevealed) {
@@ -171,6 +273,11 @@ export function useCommitReveal(): UseCommitRevealReturn {
 
     if (!commitDataRef.current) {
       setError("Must commit before revealing.");
+      return;
+    }
+
+    if (!sessionWalletId) {
+      setError("Session wallet not ready.");
       return;
     }
 
@@ -185,16 +292,14 @@ export function useCommitReveal(): UseCommitRevealReturn {
       const { move, nonce } = commitDataRef.current;
       const revealData = createReveal(move, nonce);
 
-      await sendMany({
-        from: sessionWalletId!,
-        assetId: MIDEN_FAUCET_ID,
-        recipients: [
-          { to: opponentId!, amount: BigInt(revealData.move) },
-          { to: opponentId!, amount: revealData.noncePart1 },
-          { to: opponentId!, amount: revealData.noncePart2 },
-        ],
-        noteType: "public",
-      });
+      await sync();
+
+      await sendAttachmentNote(
+        execute,
+        sessionWalletId,
+        opponentId,
+        [MSG_TYPE_REVEAL, BigInt(revealData.move), revealData.noncePart1, revealData.noncePart2],
+      );
 
       const revealStoreData: RevealData = {
         move: revealData.move,
@@ -203,125 +308,138 @@ export function useCommitReveal(): UseCommitRevealReturn {
       };
       setMyReveal(revealStoreData);
       setIsRevealed(true);
+
+      console.log("[useCommitReveal] reveal sent", {
+        round,
+        move: revealData.move,
+      });
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to send reveal.";
+      console.error("[useCommitReveal] reveal failed", err);
       setError(message);
     }
-  }, [isRevealed, sessionWalletId, opponentId, sendMany, setMyReveal]);
+  }, [isRevealed, sessionWalletId, opponentId, round, execute, sync, setMyReveal]);
 
   // -----------------------------------------------------------------------
-  // verify() - Check that an opponent's reveal matches their commitment
+  // Detect opponent commit note: 1 new note with MSG_TYPE_COMMIT attachment
   // -----------------------------------------------------------------------
-  const verify = useCallback(
-    async (
-      move: number,
-      noncePart1: bigint,
-      noncePart2: bigint,
-      commitPart1: bigint,
-      commitPart2: bigint,
-    ): Promise<boolean> => {
-      return verifyReveal(move, noncePart1, noncePart2, commitPart1, commitPart2);
-    },
-    [],
-  );
-
-  // -----------------------------------------------------------------------
-  // Detect opponent commit notes (exactly 2 notes with amounts in commit range)
-  // -----------------------------------------------------------------------
-
-  // We identify commit notes as those with amounts above the nonce range
-  // (since nonce chunks fit in 32 bits but commit chunks use 48 bits).
-  // For amounts in the overlapping range [1, NONCE_CHUNK_MAX], we rely on
-  // the note count and the game phase.
-  const opponentCommitParts = useMemo(() => {
-    // Commit notes have amounts in [1, COMMIT_CHUNK_MAX].
-    // We look at ALL opponent notes, not just those pre-categorised,
-    // because the amount-based categorisation has overlapping ranges.
-    // We use a heuristic: commit comes as a pair of notes with large amounts.
-    return allOpponentNotes.filter(
-      (n) => n.amount > 0n && n.amount <= COMMIT_CHUNK_MAX,
-    );
-  }, [allOpponentNotes]);
-
-  const opponentCommitted = commitNotes.length >= 2 || opponentCommitParts.length >= 2;
-
   useEffect(() => {
-    if (commitProcessedRef.current || !opponentCommitted) return;
+    if (opponentCommitted) return;
 
-    // Use the first 2 commit-range notes as the opponent's commitment
-    const parts =
-      commitNotes.length >= 2 ? commitNotes : opponentCommitParts;
-    if (parts.length < 2) return;
+    for (const record of rawOpponentNotes) {
+      const noteId = record.id().toString();
+      if (handledNoteIds.current.has(noteId)) continue;
 
-    commitProcessedRef.current = true;
-    setOpponentCommitNotes([
-      { noteId: parts[0].noteId, amount: parts[0].amount },
-      { noteId: parts[1].noteId, amount: parts[1].amount },
-    ]);
-  }, [opponentCommitted, commitNotes, opponentCommitParts, setOpponentCommitNotes]);
+      const felts = readAttachment(record);
+      if (!felts || felts.length < 3) continue;
+
+      const msgType = felts[0];
+      if (msgType !== MSG_TYPE_COMMIT) continue;
+
+      const rawPart1 = felts[1];
+      const rawPart2 = felts[2];
+
+      handledNoteIds.current.add(noteId);
+
+      console.log("[useCommitReveal] opponent commit detected", {
+        round,
+        rawPart1: rawPart1.toString(),
+        rawPart2: rawPart2.toString(),
+      });
+
+      setOpponentCommitNotes([
+        { noteId, amount: rawPart1 },
+        { noteId, amount: rawPart2 },
+      ]);
+      setOpponentCommitted(true);
+      break;
+    }
+  }, [opponentCommitted, rawOpponentNotes, round, setOpponentCommitNotes]);
 
   // -----------------------------------------------------------------------
-  // Detect opponent reveal notes (3 notes: move + 2 nonce parts)
+  // Detect opponent reveal note: 1 new note with MSG_TYPE_REVEAL attachment
   // -----------------------------------------------------------------------
-  const opponentRevealed = revealNotes.length >= 3;
-
   useEffect(() => {
-    if (revealProcessedRef.current || !opponentRevealed) return;
-    if (revealNotes.length < 3) return;
+    if (!opponentCommitted || opponentRevealed) return;
 
-    revealProcessedRef.current = true;
+    for (const record of rawOpponentNotes) {
+      const noteId = record.id().toString();
+      if (handledNoteIds.current.has(noteId)) continue;
 
-    // Identify the move note (amount in [MOVE_MIN, MOVE_MAX])
-    // and the 2 nonce parts (amount in [1, NONCE_CHUNK_MAX])
-    const moveNote = revealNotes.find(
-      (n) => n.amount >= MOVE_MIN && n.amount <= MOVE_MAX,
-    );
-    const nonceParts = revealNotes.filter(
-      (n) => n.amount > 0n && n.amount <= NONCE_CHUNK_MAX && n !== moveNote,
-    );
+      const felts = readAttachment(record);
+      if (!felts || felts.length < 4) continue;
 
-    if (!moveNote || nonceParts.length < 2) return;
+      const msgType = felts[0];
+      if (msgType !== MSG_TYPE_REVEAL) continue;
 
-    const oppMove = Number(moveNote.amount);
-    const noncePart1 = nonceParts[0].amount;
-    const noncePart2 = nonceParts[1].amount;
+      const oppMove = Number(felts[1]);
+      const noncePart1 = felts[2];
+      const noncePart2 = felts[3];
 
-    // Read committed values from store
-    const storeState = useGameStore.getState();
-    const commitNoteRefs = storeState.battle.opponentCommitNotes;
-    if (commitNoteRefs.length < 2) return;
+      handledNoteIds.current.add(noteId);
 
-    const commitPart1 = commitNoteRefs[0].amount;
-    const commitPart2 = commitNoteRefs[1].amount;
+      // Read committed values from store (already raw)
+      const storeState = useGameStore.getState();
+      const commitNoteRefs = storeState.battle.opponentCommitNotes;
+      if (commitNoteRefs.length < 2) break;
 
-    // Verify asynchronously
-    (async () => {
-      const valid = await verifyReveal(
-        oppMove,
-        noncePart1,
-        noncePart2,
-        commitPart1,
-        commitPart2,
-      );
+      const commitPart1 = commitNoteRefs[0].amount;
+      const commitPart2 = commitNoteRefs[1].amount;
 
-      if (valid) {
-        setOpponentMove(oppMove);
-        setOpponentReveal({
-          move: oppMove,
-          noncePart1,
-          noncePart2,
-        });
-      } else {
-        setError("Opponent reveal verification failed - possible cheating detected.");
-      }
-    })();
-  }, [opponentRevealed, revealNotes, setOpponentReveal]);
+      console.log("[useCommitReveal] opponent reveal detected", {
+        round,
+        move: oppMove,
+        noncePart1: noncePart1.toString(),
+        noncePart2: noncePart2.toString(),
+        commitPart1: commitPart1.toString(),
+        commitPart2: commitPart2.toString(),
+      });
+
+      // Verify asynchronously
+      (async () => {
+        try {
+          const valid = await verifyReveal(
+            oppMove,
+            noncePart1,
+            noncePart2,
+            commitPart1,
+            commitPart2,
+          );
+
+          if (valid) {
+            console.log("[useCommitReveal] opponent reveal verified", { round, move: oppMove });
+            setOpponentMove(oppMove);
+            setOpponentReveal({
+              move: oppMove,
+              noncePart1,
+              noncePart2,
+            });
+            setOpponentRevealed(true);
+          } else {
+            console.error("[useCommitReveal] opponent reveal verification FAILED", {
+              round,
+              oppMove,
+              noncePart1: noncePart1.toString(),
+              noncePart2: noncePart2.toString(),
+              commitPart1: commitPart1.toString(),
+              commitPart2: commitPart2.toString(),
+            });
+            setError("Opponent reveal verification failed - possible cheating detected.");
+          }
+        } catch (err) {
+          console.error("[useCommitReveal] reveal verification threw", err);
+          setError("Reveal verification error.");
+        }
+      })();
+
+      break;
+    }
+  }, [opponentCommitted, opponentRevealed, rawOpponentNotes, round, setOpponentReveal]);
 
   return {
     commit,
     reveal,
-    verify,
     isCommitted,
     isRevealed,
     opponentCommitted,

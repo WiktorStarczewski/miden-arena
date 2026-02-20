@@ -29,7 +29,7 @@ export default function ErrorScreen({ error, onRetry }: ErrorScreenProps) {
           {onRetry && (
             <motion.button
               onClick={onRetry}
-              className="rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 px-8 py-3 font-bold text-white"
+              className="cursor-pointer rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 px-8 py-3 font-bold text-white"
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.97 }}
             >
@@ -38,7 +38,7 @@ export default function ErrorScreen({ error, onRetry }: ErrorScreenProps) {
           )}
           <motion.button
             onClick={() => window.location.reload()}
-            className="rounded-xl border border-white/10 bg-black/40 px-8 py-3 font-bold text-gray-300"
+            className="cursor-pointer rounded-xl border border-white/10 bg-black/40 px-8 py-3 font-bold text-gray-300"
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.97 }}
           >

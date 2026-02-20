@@ -1,16 +1,16 @@
-import React, { useRef, useMemo, Suspense, useState } from "react";
+import React, { useRef, useMemo, Suspense, useState, useCallback } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import {
   Environment,
-  ContactShadows,
   AdaptiveDpr,
   PerformanceMonitor,
 } from "@react-three/drei";
-import { Group, Color, DataTexture, NearestFilter, Mesh } from "three";
+import { Group, Color, DataTexture, NearestFilter, RedFormat, Mesh } from "three";
 
 import ChampionModel from "./ChampionModel";
 import ElementalAura from "./ElementalAura";
 import PostProcessing from "./PostProcessing";
+import DraftBackground from "./DraftBackground";
 
 // TYPES
 // ================================================================================================
@@ -33,6 +33,7 @@ const ELEMENT_COLORS: Record<string, string> = {
 
 const DEFAULT_COLOR = "#888888";
 const ROTATION_SPEED = 0.4;
+const DRAG_SENSITIVITY = 0.01;
 const CAMERA_POSITION: [number, number, number] = [0, 2.5, 4.5];
 
 // GRADIENT MAP
@@ -40,7 +41,7 @@ const CAMERA_POSITION: [number, number, number] = [0, 2.5, 4.5];
 
 function createGradientMap(): DataTexture {
   const colors = new Uint8Array([50, 100, 160, 220]);
-  const texture = new DataTexture(colors, 4, 1);
+  const texture = new DataTexture(colors, 4, 1, RedFormat);
   texture.magFilter = NearestFilter;
   texture.minFilter = NearestFilter;
   texture.needsUpdate = true;
@@ -59,7 +60,7 @@ const Pedestal = React.memo(function Pedestal({
   const glowColor = useMemo(() => new Color(elementColor), [elementColor]);
 
   return (
-    <group position={[0, -0.05, 0]}>
+    <group position={[0, -0.05, 0]} scale={[0.5, 0.5, 0.5]}>
       {/* Main pedestal cylinder */}
       <mesh position={[0, -0.25, 0]} receiveShadow>
         <cylinderGeometry args={[1.0, 1.2, 0.5, 32]} />
@@ -104,15 +105,23 @@ const RotatingChampion = React.memo(function RotatingChampion({
   championId,
   elementColor,
   shouldRotate,
+  dragDeltaX,
 }: {
   championId: number;
   elementColor: string;
   shouldRotate: boolean;
+  dragDeltaX: number;
 }) {
   const groupRef = useRef<Group>(null);
 
   useFrame((_, delta) => {
-    if (groupRef.current && shouldRotate) {
+    if (!groupRef.current) return;
+    // Apply drag rotation (consumed each frame)
+    if (dragDeltaX !== 0) {
+      groupRef.current.rotation.y += dragDeltaX;
+    }
+    // Auto-rotate on top
+    if (shouldRotate) {
       groupRef.current.rotation.y += delta * ROTATION_SPEED;
     }
   });
@@ -215,7 +224,9 @@ const DraftSceneContent = React.memo(function DraftSceneContent({
   championId,
   onRotate = true,
   element,
-}: DraftStageProps) {
+  dragDeltaX,
+  mousePosition,
+}: DraftStageProps & { dragDeltaX: number; mousePosition: React.RefObject<{ x: number; y: number }> }) {
   const elementColor = element
     ? ELEMENT_COLORS[element] ?? DEFAULT_COLOR
     : DEFAULT_COLOR;
@@ -224,7 +235,9 @@ const DraftSceneContent = React.memo(function DraftSceneContent({
     <>
       {/* Background */}
       <fog attach="fog" args={["#12121e", 6, 18]} />
-      <color attach="background" args={["#12121e"]} />
+
+      {/* Themed parallax background */}
+      <DraftBackground championId={championId} mousePosition={mousePosition} />
 
       {/* Environment */}
       <Environment preset="night" />
@@ -232,38 +245,34 @@ const DraftSceneContent = React.memo(function DraftSceneContent({
       {/* Lighting */}
       <DraftLighting elementColor={elementColor} />
 
-      {/* Pedestal */}
-      <Pedestal elementColor={elementColor} />
+      {/* Scene group — shifted down so pedestal sits near bottom of viewport */}
+      <group position={[0, -0.9, 0]}>
+        {/* Pedestal */}
+        <Pedestal elementColor={elementColor} />
 
-      {/* Champion or empty state */}
-      {championId !== null ? (
-        <>
-          <RotatingChampion
-            championId={championId}
-            elementColor={elementColor}
-            shouldRotate={onRotate ?? true}
-          />
-          {element && (
-            <ElementalAura
-              element={element}
-              position={[0, 0.2, 0]}
-              intensity={0.8}
+        {/* Champion or empty state */}
+        {championId !== null ? (
+          <>
+            <RotatingChampion
+              championId={championId}
+              elementColor={elementColor}
+              shouldRotate={onRotate ?? true}
+              dragDeltaX={dragDeltaX}
             />
-          )}
-        </>
-      ) : (
-        <EmptyPedestal />
-      )}
+            {element && (
+              <ElementalAura
+                element={element}
+                position={[0, 0.2, 0]}
+                intensity={0.8}
+              />
+            )}
+          </>
+        ) : (
+          <EmptyPedestal />
+        )}
 
-      {/* Contact shadows */}
-      <ContactShadows
-        position={[0, 0, 0]}
-        opacity={0.5}
-        scale={5}
-        blur={2}
-        far={3}
-        color="#000020"
-      />
+        {/* Pedestal provides visual grounding; ContactShadows removed to avoid z-fighting */}
+      </group>
 
       {/* Post-processing - softer for draft */}
       <PostProcessing
@@ -280,6 +289,38 @@ const DraftSceneContent = React.memo(function DraftSceneContent({
 
 const DraftStage = React.memo(function DraftStage(props: DraftStageProps) {
   const [dpr, setDpr] = useState(1.5);
+  const [dragDeltaX, setDragDeltaX] = useState(0);
+  const mousePosition = useRef({ x: 0, y: 0 });
+  const isDragging = useRef(false);
+  const lastPointerX = useRef(0);
+  const cachedRect = useRef<DOMRect | null>(null);
+
+  const onPointerDown = useCallback((e: React.PointerEvent) => {
+    isDragging.current = true;
+    lastPointerX.current = e.clientX;
+    cachedRect.current = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }, []);
+
+  const onPointerMove = useCallback((e: React.PointerEvent) => {
+    // Track mouse position for parallax (normalized -1 to 1)
+    const rect = cachedRect.current ?? (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const nx = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    const ny = -(((e.clientY - rect.top) / rect.height) * 2 - 1);
+    mousePosition.current.x = nx;
+    mousePosition.current.y = ny;
+
+    if (!isDragging.current) return;
+    const dx = e.clientX - lastPointerX.current;
+    lastPointerX.current = e.clientX;
+    setDragDeltaX(dx * DRAG_SENSITIVITY);
+  }, []);
+
+  const onPointerUp = useCallback(() => {
+    isDragging.current = false;
+    cachedRect.current = null;
+    setDragDeltaX(0);
+  }, []);
 
   return (
     <Canvas
@@ -294,8 +335,13 @@ const DraftStage = React.memo(function DraftStage(props: DraftStageProps) {
       style={{
         width: "100%",
         height: "100%",
-        background: "#12121e",
+        background: "#0a0a14",
+        cursor: isDragging.current ? "grabbing" : "grab",
       }}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerLeave={onPointerUp}
     >
       <Suspense fallback={null}>
         <PerformanceMonitor
@@ -303,7 +349,7 @@ const DraftStage = React.memo(function DraftStage(props: DraftStageProps) {
           onDecline={() => setDpr(1)}
         >
           <AdaptiveDpr pixelated />
-          <DraftSceneContent {...props} />
+          <DraftSceneContent {...props} dragDeltaX={dragDeltaX} mousePosition={mousePosition} />
         </PerformanceMonitor>
       </Suspense>
     </Canvas>

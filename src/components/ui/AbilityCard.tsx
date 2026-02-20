@@ -83,7 +83,7 @@ export default function AbilityCard({
         </div>
 
         {/* Description */}
-        <p className="text-[11px] leading-snug text-white/50 line-clamp-2">
+        <p className="text-[11px] leading-snug text-white/50 line-clamp-2 min-h-[calc(2*11px*1.375)] sm:min-h-0">
           {ability.description}
         </p>
 

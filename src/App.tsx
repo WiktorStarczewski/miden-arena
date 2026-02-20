@@ -6,6 +6,7 @@ import TitleScreen from "./screens/TitleScreen";
 import SetupScreen from "./screens/SetupScreen";
 import LobbyScreen from "./screens/LobbyScreen";
 import DraftScreen from "./screens/DraftScreen";
+import PreBattleLoadingScreen from "./screens/PreBattleLoadingScreen";
 import BattleScreen from "./screens/BattleScreen";
 import GameOverScreen from "./screens/GameOverScreen";
 import ErrorScreen from "./screens/ErrorScreen";
@@ -34,6 +35,8 @@ function renderScreen(screen: string) {
       return <LobbyScreen />;
     case "draft":
       return <DraftScreen />;
+    case "preBattleLoading":
+      return <PreBattleLoadingScreen />;
     case "battle":
       return <BattleScreen />;
     case "gameOver":

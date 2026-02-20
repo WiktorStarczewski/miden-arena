@@ -23,6 +23,7 @@ import {
   NetworkId,
   AccountInterface,
 } from "@miden-sdk/miden-sdk";
+import type { ConsumableNoteRecord } from "@miden-sdk/miden-sdk";
 import {
   useWallet,
   WalletReadyState,
@@ -167,7 +168,7 @@ export function useSessionWallet(): UseSessionWalletReturn {
     (async () => {
       try {
         const wallet = await client.newWallet(
-          AccountStorageMode.private(),
+          AccountStorageMode.public(),
           true,
           AuthScheme.AuthRpoFalcon512,
         );
@@ -271,7 +272,7 @@ export function useSessionWallet(): UseSessionWalletReturn {
                 consumable.length,
                 "consumable note(s) for account. Consuming...",
               );
-              const notes = consumable.map((r) => r.inputNoteRecord().toNote());
+              const notes = consumable.map((rec: ConsumableNoteRecord) => rec.inputNoteRecord().toNote());
               const txRequest = client.newConsumeTransactionRequest(notes);
               // Fresh accountId for the submit call (WASM pointer consumed above)
               const submitAccountId = AccountId.fromBech32(walletId);
@@ -293,7 +294,7 @@ export function useSessionWallet(): UseSessionWalletReturn {
           console.warn("[useSessionWallet] Poll/consume attempt failed:", err);
         }
 
-        await new Promise((r) => setTimeout(r, CONSUME_POLL_MS));
+        await new Promise((resolve) => setTimeout(resolve, CONSUME_POLL_MS));
       }
     };
 

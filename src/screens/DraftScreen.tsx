@@ -1,52 +1,104 @@
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useGameStore } from "../store/gameStore";
 import { useDraft } from "../hooks/useDraft";
+import { getChampion } from "../constants/champions";
+import { playMusic, playSfx, playVoice } from "../audio/audioManager";
 import GameLayout from "../components/layout/GameLayout";
 import DraftPool from "../components/draft/DraftPool";
 import DraftTimeline from "../components/draft/DraftTimeline";
+import ElementChart from "../components/draft/ElementChart";
 import TeamPreview from "../components/draft/TeamPreview";
 import DraftStage from "../scenes/DraftStage";
 import GlassPanel from "../components/layout/GlassPanel";
+import type { Element } from "../types/game";
+
+const ELEMENT_COLORS: Record<Element, string> = {
+  fire: "#ff6b35",
+  water: "#4fc3f7",
+  earth: "#8d6e63",
+  wind: "#aed581",
+};
 
 export default function DraftScreen() {
   const draft = useGameStore((s) => s.draft);
   const role = useGameStore((s) => s.match.role);
   const setScreen = useGameStore((s) => s.setScreen);
-  const { pickChampion, isMyTurn, isDone } = useDraft();
-  const selectedPreview = useGameStore((s) => s.battle.selectedChampion);
+  const { pickChampion, isMyTurn, isDone, isSending } = useDraft();
+
+  // Preview state — local only, defaults to first available champion
+  const [previewId, setPreviewId] = useState<number | null>(
+    draft.pool[0] ?? null,
+  );
+
+  // Reset preview to first available when pool changes
+  useEffect(() => {
+    if (previewId === null || !draft.pool.includes(previewId)) {
+      setPreviewId(draft.pool[0] ?? null);
+    }
+  }, [draft.pool, previewId]);
+
+  const previewChampion = previewId !== null ? getChampion(previewId) : null;
+
+  // Crossfade to draft music on mount
+  useEffect(() => {
+    playMusic("draft");
+  }, []);
 
   // Transition to battle when draft complete
   if (isDone) {
     setTimeout(() => setScreen("battle"), 2000);
   }
 
+  const pickDisabled = !isMyTurn || isDone || previewId === null || isSending;
+
   return (
     <GameLayout title="Champion Draft">
       <div className="flex h-full flex-col">
-        {/* 3D Champion Preview - top 40% on mobile */}
-        <div className="relative h-[35vh] w-full sm:h-[40vh]">
-          <DraftStage championId={selectedPreview} />
+        {/* 3D Champion Preview — bleed past GameLayout padding.
+             Critical: inline styles ensure Canvas gets correct dimensions
+             on first paint, before Tailwind CSS loads. */}
+        <div
+          className="relative flex-shrink-0"
+          style={{ height: "50vh", width: "calc(100% + 1.5rem)", margin: "-0.75rem -0.75rem 0" }}
+        >
+          <DraftStage
+            championId={previewId}
+            element={previewChampion?.element}
+          />
 
-          {/* Overlay: Draft timeline */}
-          <div className="absolute left-0 right-0 top-2 flex justify-center px-4">
+          {/* Overlay: compact vertical rails on mobile, full panels on sm+ */}
+          {/* Mobile: thin left rail */}
+          <div className="absolute left-2 top-1/2 -translate-y-1/2 sm:hidden">
+            <DraftTimeline pickNumber={draft.pickNumber} role={role ?? "host"} compact />
+          </div>
+          {/* Mobile: thin right rail */}
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 sm:hidden">
+            <ElementChart compact />
+          </div>
+          {/* Desktop: full panels */}
+          <div className="absolute left-4 top-4 hidden sm:block">
             <DraftTimeline pickNumber={draft.pickNumber} role={role ?? "host"} />
+          </div>
+          <div className="absolute right-4 top-4 hidden sm:block">
+            <ElementChart />
           </div>
         </div>
 
-        {/* Draft UI - bottom 60% */}
-        <div className="flex-1 space-y-3 overflow-y-auto px-4 pb-4">
-          {/* Turn indicator */}
+        {/* Draft UI */}
+        <div className="flex-1 min-h-0 flex flex-col space-y-3 px-4 pb-4">
+          {/* Turn indicator + Pick button */}
           <AnimatePresence mode="wait">
             <motion.div
               key={isMyTurn ? "my-turn" : "opp-turn"}
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 10 }}
-              className="text-center"
+              className="text-center space-y-2"
             >
               <GlassPanel compact>
                 <p
-                  className={`text-sm font-bold ${
+                  className={`font-display text-sm font-bold ${
                     isDone
                       ? "text-green-400"
                       : isMyTurn
@@ -61,29 +113,68 @@ export default function DraftScreen() {
                       : "Opponent is choosing..."}
                 </p>
               </GlassPanel>
+
+              {/* Pick button — visible on your turn */}
+              {isMyTurn && !isDone && (
+                <button
+                  disabled={pickDisabled}
+                  onClick={() => {
+                    if (previewId !== null) {
+                      playSfx("pick");
+                      pickChampion(previewId);
+                    }
+                  }}
+                  className="cursor-pointer font-display w-full rounded-xl px-4 py-2.5 text-sm font-bold text-white
+                    transition-all duration-200 active:scale-[0.97]
+                    disabled:opacity-40 disabled:cursor-not-allowed"
+                  style={{
+                    background: previewChampion
+                      ? `linear-gradient(135deg, ${ELEMENT_COLORS[previewChampion.element]}cc, ${ELEMENT_COLORS[previewChampion.element]}66)`
+                      : "linear-gradient(135deg, #888c, #8886)",
+                  }}
+                >
+                  {isSending ? (
+                    <span className="inline-flex items-center gap-2">
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                      Picking…
+                    </span>
+                  ) : previewChampion ? (
+                    `Pick ${previewChampion.name}`
+                  ) : (
+                    "Select a Champion"
+                  )}
+                </button>
+              )}
             </motion.div>
           </AnimatePresence>
 
           {/* Teams preview */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <p className="mb-1 text-xs font-bold text-amber-400 uppercase">Your Team</p>
+              <p className="font-display mb-1 text-xs font-bold text-amber-400 uppercase">Your Team</p>
               <TeamPreview team={draft.myTeam} />
             </div>
             <div>
-              <p className="mb-1 text-xs font-bold text-red-400 uppercase">Opponent</p>
-              <TeamPreview team={draft.opponentTeam} />
+              <p className="font-display mb-1 text-xs font-bold text-red-400 uppercase">Opponent</p>
+              <TeamPreview team={draft.opponentTeam} label="Their Team" />
             </div>
           </div>
 
-          {/* Champion pool */}
-          <div>
-            <p className="mb-2 text-xs font-bold text-gray-400 uppercase">Available Champions</p>
-            <DraftPool
-              pool={draft.pool}
-              onPick={(id) => pickChampion(id)}
-              disabled={!isMyTurn || isDone}
-            />
+          {/* Champion pool — scrollable */}
+          <div className="flex min-h-0 flex-1 flex-col">
+            <p className="font-display mb-2 text-xs font-bold text-gray-400 uppercase flex-shrink-0">Available Champions</p>
+            <div className="flex-1 overflow-y-auto min-h-0 -m-1 p-1">
+              <DraftPool
+                pool={draft.pool}
+                selectedId={previewId}
+                onSelect={(id) => {
+                  setPreviewId(id);
+                  playSfx("select");
+                  if (isMyTurn) playVoice(id);
+                }}
+                disabled={!isMyTurn || isDone}
+              />
+            </div>
           </div>
         </div>
       </div>

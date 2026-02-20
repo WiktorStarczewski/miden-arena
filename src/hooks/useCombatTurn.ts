@@ -21,14 +21,16 @@ import { useGameStore, type BattlePhase } from "../store/gameStore";
 import { useCommitReveal } from "./useCommitReveal";
 import { encodeMove, decodeMove } from "../engine/codec";
 import { resolveTurn, isTeamEliminated } from "../engine/combat";
+import { playSfx } from "../audio/audioManager";
 import type { TurnAction, TurnRecord } from "../types";
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-/** Duration (ms) to show the animation phase before advancing to the next turn. */
-const ANIMATION_DURATION_MS = 2500;
+/** Duration (ms) to show the animation phase before advancing to the next turn.
+ *  Must accommodate two sequential attack animations (faster champ first). */
+const ANIMATION_DURATION_MS = 4000;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -169,6 +171,15 @@ export function useCombatTurn(): UseCombatTurnReturn {
       events: result.events,
     };
     addTurnRecord(record);
+
+    // Check if any champion was newly KO'd this turn
+    const prevMyKOs = myChampions.filter((c) => c.isKO).length;
+    const prevOppKOs = opponentChampions.filter((c) => c.isKO).length;
+    const newMyKOs = result.myChampions.filter((c) => c.isKO).length;
+    const newOppKOs = result.opponentChampions.filter((c) => c.isKO).length;
+    if (newMyKOs > prevMyKOs || newOppKOs > prevOppKOs) {
+      setTimeout(() => playSfx("ko"), 500);
+    }
 
     // Transition to animation phase
     setBattlePhase("animating");

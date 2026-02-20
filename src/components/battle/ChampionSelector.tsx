@@ -36,10 +36,9 @@ export default function ChampionSelector({
       <div
         ref={scrollRef}
         className="
-          flex gap-3 overflow-x-auto pb-2 px-1
+          flex justify-center gap-3 overflow-x-auto py-1 px-1
           snap-x snap-mandatory
           scrollbar-none
-          -mx-1
         "
         style={{
           scrollbarWidth: "none",
@@ -62,11 +61,11 @@ export default function ChampionSelector({
               disabled={isKO}
               whileTap={!isKO ? { scale: 0.95 } : undefined}
               className={`
-                flex-shrink-0 snap-center w-[140px]
-                touch-manipulation
+                flex-shrink-0 snap-center w-24 sm:w-[210px]
+                touch-manipulation rounded-xl
+                border-2 transition-colors
                 ${isKO ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}
-                ${isSelected ? "ring-2 ring-amber-400 ring-offset-1 ring-offset-transparent" : ""}
-                rounded-xl transition-shadow
+                ${isSelected ? "border-amber-400" : "border-transparent"}
               `}
             >
               <GlassPanel
@@ -99,7 +98,7 @@ export default function ChampionSelector({
                     <span className="font-bold text-xs text-white/90 truncate">
                       {champion.name}
                     </span>
-                    <ElementBadge element={champion.element} size="sm" />
+                    <span className="hidden sm:inline"><ElementBadge element={champion.element} size="sm" /></span>
                   </div>
 
                   <HealthBar

@@ -18,7 +18,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import { useSend } from "@miden-sdk/react";
+import { useSend, useSyncState } from "@miden-sdk/react";
 import { useGameStore } from "../store/gameStore";
 import { useNoteDecoder } from "./useNoteDecoder";
 import { MIDEN_FAUCET_ID } from "../constants/miden";
@@ -29,6 +29,8 @@ import {
   isDraftComplete,
   isValidPick,
 } from "../engine/draft";
+import { saveDraftState, clearGameState } from "../utils/persistence";
+import { playSfx } from "../audio/audioManager";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -66,14 +68,38 @@ export function useDraft(): UseDraftReturn {
   const setScreen = useGameStore((s) => s.setScreen);
   const initBattle = useGameStore((s) => s.initBattle);
 
+  const resetGame = useGameStore((s) => s.resetGame);
+
   const { send } = useSend();
-  const { draftPickNotes } = useNoteDecoder(opponentId);
+  const { sync } = useSyncState();
+  const { draftPickNotes, leaveNotes, allOpponentNotes } = useNoteDecoder(opponentId);
+
+  const staleNoteIds = useGameStore((s) => s.draft.staleNoteIds);
 
   const [error, setError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
+  const isSendingRef = useRef(false);
 
-  // Track how many opponent picks we have already processed
-  const processedPickCount = useRef(0);
+  // Set of note IDs from the opponent that existed before this game started
+  // (snapshotted by useMatchmaking at match-complete time) plus IDs already
+  // processed in this session. Notes in this set are skipped by the detector.
+  const handledNoteIds = useRef(new Set(staleNoteIds));
+  const initialLeaveCount = useRef(-1);
+
+  // -----------------------------------------------------------------------
+  // Detect opponent leaving (rehost) and redirect to lobby
+  // -----------------------------------------------------------------------
+  useEffect(() => {
+    if (initialLeaveCount.current === -1) {
+      initialLeaveCount.current = leaveNotes.length;
+      return;
+    }
+    if (leaveNotes.length > initialLeaveCount.current) {
+      clearGameState();
+      resetGame();
+      setScreen("lobby");
+    }
+  }, [leaveNotes, resetGame, setScreen]);
 
   // -----------------------------------------------------------------------
   // Derived state
@@ -96,6 +122,10 @@ export function useDraft(): UseDraftReturn {
   // -----------------------------------------------------------------------
   const pickChampion = useCallback(
     async (championId: number) => {
+      // Synchronous ref guard — prevents concurrent sends even if React
+      // hasn't re-rendered yet (isSending state would be stale).
+      if (isSendingRef.current) return;
+
       if (!isMyTurn) {
         setError("It is not your turn to pick.");
         return;
@@ -112,9 +142,12 @@ export function useDraft(): UseDraftReturn {
       }
 
       setError(null);
+      isSendingRef.current = true;
       setIsSending(true);
 
       try {
+        // Sync wallet state before building tx to avoid stale commitment
+        await sync();
         // Send pick to opponent
         const amount = encodeDraftPick(championId);
         await send({
@@ -125,6 +158,12 @@ export function useDraft(): UseDraftReturn {
           noteType: "public",
         });
 
+        console.log("[useDraft] pick sent successfully", {
+          championId,
+          to: opponentId,
+          amount: amount.toString(),
+        });
+
         // Record pick locally
         storePickChampion(championId, "me");
       } catch (err) {
@@ -132,6 +171,7 @@ export function useDraft(): UseDraftReturn {
           err instanceof Error ? err.message : "Failed to send draft pick.";
         setError(message);
       } finally {
+        isSendingRef.current = false;
         setIsSending(false);
       }
     },
@@ -144,23 +184,47 @@ export function useDraft(): UseDraftReturn {
   useEffect(() => {
     if (done) return;
 
-    // Process any new draft pick notes we have not handled yet
-    const unprocessed = draftPickNotes.slice(processedPickCount.current);
-    if (unprocessed.length === 0) return;
+    // Find the first draft-pick note we haven't handled yet.
+    // Uses ID-based filtering so late-arriving stale notes are skipped.
+    const note = draftPickNotes.find(
+      (n) => !handledNoteIds.current.has(n.noteId),
+    );
+    if (!note) return;
 
-    for (const note of unprocessed) {
-      try {
-        const championId = decodeDraftPick(note.amount);
-        if (isValidPick(pool, championId)) {
-          storePickChampion(championId, "opponent");
-        }
-      } catch {
-        // Ignore malformed notes
+    // Mark handled immediately so we don't reprocess on the next render
+    handledNoteIds.current.add(note.noteId);
+
+    console.log("[useDraft] processing pick note", {
+      noteId: note.noteId,
+      amount: note.amount.toString(),
+    });
+
+    try {
+      const championId = decodeDraftPick(note.amount);
+      if (isValidPick(pool, championId)) {
+        storePickChampion(championId, "opponent");
+        playSfx("pick");
+      } else {
+        console.warn("[useDraft] skipping invalid pick", { championId, pool });
       }
+    } catch (err) {
+      console.warn("[useDraft] failed to decode pick note", err);
     }
-
-    processedPickCount.current = draftPickNotes.length;
   }, [draftPickNotes, pool, done, storePickChampion]);
+
+  // -----------------------------------------------------------------------
+  // Persist draft state to localStorage on every change
+  // -----------------------------------------------------------------------
+  useEffect(() => {
+    if (pool.length === 0) return; // not initialised yet
+    saveDraftState({
+      pool,
+      myTeam,
+      opponentTeam,
+      pickNumber,
+      processedOpponentNotes: opponentTeam.length,
+    });
+  }, [pool, myTeam, opponentTeam, pickNumber]);
 
   // -----------------------------------------------------------------------
   // Transition to battle when draft is complete
@@ -169,9 +233,14 @@ export function useDraft(): UseDraftReturn {
     if (!done) return;
     if (myTeam.length !== TEAM_SIZE || opponentTeam.length !== TEAM_SIZE) return;
 
-    initBattle();
-    setScreen("battle");
-  }, [done, myTeam.length, opponentTeam.length, initBattle, setScreen]);
+    // Snapshot all current opponent note IDs so the battle phase can
+    // distinguish pre-battle notes from new combat notes.
+    const battleStaleNoteIds = allOpponentNotes.map((n) => n.noteId);
+
+    clearGameState();
+    initBattle(battleStaleNoteIds);
+    setScreen("preBattleLoading");
+  }, [done, myTeam.length, opponentTeam.length, allOpponentNotes, initBattle, setScreen]);
 
   return {
     pickChampion,

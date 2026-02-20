@@ -37,7 +37,7 @@ export default function AccountBadge({ address, label }: AccountBadgeProps) {
     <button
       onClick={handleCopy}
       className="
-        inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg
+        cursor-pointer inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg
         bg-white/5 border border-white/10
         hover:bg-white/10 hover:border-white/20
         active:scale-[0.97]

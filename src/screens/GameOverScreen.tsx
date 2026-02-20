@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { useGameStore } from "../store/gameStore";
 import { useStaking } from "../hooks/useStaking";
 import { getChampion } from "../constants/champions";
+import { stopMusic, playSfx } from "../audio/audioManager";
 import { ELEMENT_COLORS } from "../constants/elements";
 import GlassPanel from "../components/layout/GlassPanel";
 import GameLayout from "../components/layout/GameLayout";
@@ -15,6 +16,12 @@ export default function GameOverScreen() {
 
   const isWinner = result.winner === "me";
   const mvpChampion = result.mvp !== null ? getChampion(result.mvp) : null;
+
+  // Fade out battle music and play result SFX
+  useEffect(() => {
+    stopMusic(2.0);
+    playSfx(isWinner ? "victory" : "defeat");
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-withdraw on game end
   useEffect(() => {
@@ -78,7 +85,7 @@ export default function GameOverScreen() {
               <div className="text-center">
                 <p className="mb-1 text-xs text-gray-400 uppercase">Most Valuable Champion</p>
                 <p
-                  className="text-xl font-bold"
+                  className="font-display text-xl font-bold"
                   style={{ color: ELEMENT_COLORS[mvpChampion.element] }}
                 >
                   {mvpChampion.name}
@@ -110,7 +117,7 @@ export default function GameOverScreen() {
           <div className="flex gap-4">
             <motion.button
               onClick={resetGame}
-              className="flex-1 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 py-3 font-bold text-white shadow-lg active:scale-95"
+              className="cursor-pointer flex-1 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 py-3 font-bold text-white shadow-lg active:scale-95"
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.97 }}
             >
@@ -118,7 +125,7 @@ export default function GameOverScreen() {
             </motion.button>
             <motion.button
               onClick={resetGame}
-              className="flex-1 rounded-xl border border-white/10 bg-black/40 py-3 font-bold text-gray-300 active:scale-95"
+              className="cursor-pointer flex-1 rounded-xl border border-white/10 bg-black/40 py-3 font-bold text-gray-300 active:scale-95"
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.97 }}
             >

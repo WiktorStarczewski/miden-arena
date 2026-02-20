@@ -12,3 +12,6 @@ export const FUND_AMOUNT = 15_000_000n;
 
 /** Block offset for P2IDE recall height */
 export const RECALL_BLOCK_OFFSET = 200;
+
+/** Minimal token amount for protocol notes (commit/reveal) to avoid wallet drain. */
+export const PROTOCOL_NOTE_AMOUNT = 1n;

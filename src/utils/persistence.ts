@@ -4,6 +4,7 @@ const KEYS = {
   SETUP_COMPLETE: "miden-arena:setupComplete",
   OPPONENT_ID: "miden-arena:opponentId",
   ROLE: "miden-arena:role",
+  DRAFT_STATE: "miden-arena:draftState",
 } as const;
 
 export function saveSessionWalletId(id: string): void {
@@ -40,9 +41,49 @@ export function getRole(): "host" | "joiner" | null {
   return null;
 }
 
+export interface PersistedDraft {
+  pool: number[];
+  myTeam: number[];
+  opponentTeam: number[];
+  pickNumber: number;
+  /** How many opponent draft-pick notes were already processed. */
+  processedOpponentNotes: number;
+}
+
+export function saveDraftState(state: PersistedDraft): void {
+  localStorage.setItem(KEYS.DRAFT_STATE, JSON.stringify(state));
+}
+
+export function getDraftState(): PersistedDraft | null {
+  const raw = localStorage.getItem(KEYS.DRAFT_STATE);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (
+      !Array.isArray(parsed.pool) ||
+      !Array.isArray(parsed.myTeam) ||
+      !Array.isArray(parsed.opponentTeam) ||
+      typeof parsed.pickNumber !== "number" ||
+      typeof parsed.processedOpponentNotes !== "number" ||
+      parsed.pickNumber < 0 ||
+      parsed.pickNumber > 6
+    ) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function clearDraftState(): void {
+  localStorage.removeItem(KEYS.DRAFT_STATE);
+}
+
 export function clearGameState(): void {
   localStorage.removeItem(KEYS.OPPONENT_ID);
   localStorage.removeItem(KEYS.ROLE);
+  localStorage.removeItem(KEYS.DRAFT_STATE);
 }
 
 export function markSetupComplete(): void {

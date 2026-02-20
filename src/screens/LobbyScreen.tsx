@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useGameStore } from "../store/gameStore";
 import { useMatchmaking } from "../hooks/useMatchmaking";
+import { playMusic } from "../audio/audioManager";
 import GlassPanel from "../components/layout/GlassPanel";
 import AccountBadge from "../components/ui/AccountBadge";
 import GameLayout from "../components/layout/GameLayout";
@@ -13,11 +14,15 @@ export default function LobbyScreen() {
   const [joinInput, setJoinInput] = useState("");
   const [mode, setMode] = useState<"choose" | "host" | "join">("choose");
 
-  // Once matched, move to draft
-  if (opponentId) {
-    // Small delay to show matched state
-    setTimeout(() => setScreen("draft"), 1500);
-  }
+  // Ensure menu music is playing (continue from title or restart if needed)
+  useEffect(() => {
+    playMusic("menu");
+  }, []);
+
+  // The matchmaking hooks (useMatchmaking) handle the screen transition
+  // to "draft" once both sides have exchanged signals and initDraft() has
+  // been called. The lobby just shows the "Match Found!" UI when
+  // opponentId is set.
 
   return (
     <GameLayout title="Lobby" showBackButton onBack={() => setScreen("setup")}>
@@ -38,9 +43,13 @@ export default function LobbyScreen() {
                 >
                   &#9876;
                 </motion.div>
-                <h3 className="text-xl font-bold text-green-400">Match Found!</h3>
+                <h3 className="font-display text-xl font-bold text-green-400">Match Found!</h3>
                 <AccountBadge address={opponentId} label="Opponent" />
-                <p className="text-sm text-gray-400">Entering draft phase...</p>
+                {error ? (
+                  <p className="text-sm text-red-400">{error}</p>
+                ) : (
+                  <p className="text-sm text-gray-400">Entering draft phase...</p>
+                )}
               </div>
             </GlassPanel>
           ) : mode === "choose" ? (
@@ -48,7 +57,7 @@ export default function LobbyScreen() {
             <>
               <GlassPanel>
                 <div className="space-y-4 text-center">
-                  <h3 className="text-lg font-bold text-white">Your Session Wallet</h3>
+                  <h3 className="font-display text-lg font-bold text-white">Your Session Wallet</h3>
                   {sessionWalletId && (
                     <AccountBadge address={sessionWalletId} label="Share this ID" />
                   )}
@@ -61,21 +70,21 @@ export default function LobbyScreen() {
                     setMode("host");
                     host();
                   }}
-                  className="rounded-xl bg-gradient-to-b from-purple-500/80 to-purple-700/80 p-6 text-center font-bold text-white shadow-lg active:scale-95"
+                  className="cursor-pointer font-display rounded-xl bg-gradient-to-b from-purple-500/80 to-purple-700/80 p-6 text-center font-bold text-white shadow-lg active:scale-95"
                   whileHover={{ scale: 1.03 }}
                   whileTap={{ scale: 0.97 }}
                 >
-                  <div className="mb-2 text-3xl">&#9813;</div>
+                  <div className="mb-2 text-5xl">&#9813;</div>
                   Host Game
                 </motion.button>
 
                 <motion.button
                   onClick={() => setMode("join")}
-                  className="rounded-xl bg-gradient-to-b from-cyan-500/80 to-cyan-700/80 p-6 text-center font-bold text-white shadow-lg active:scale-95"
+                  className="cursor-pointer font-display rounded-xl bg-gradient-to-b from-cyan-500/80 to-cyan-700/80 p-6 text-center font-bold text-white shadow-lg active:scale-95"
                   whileHover={{ scale: 1.03 }}
                   whileTap={{ scale: 0.97 }}
                 >
-                  <div className="mb-2 text-3xl">&#9876;</div>
+                  <div className="mb-2 text-5xl">&#9876;</div>
                   Join Game
                 </motion.button>
               </div>
@@ -84,7 +93,7 @@ export default function LobbyScreen() {
             // Hosting - waiting for opponent
             <GlassPanel>
               <div className="space-y-4 text-center">
-                <h3 className="text-lg font-bold text-white">Hosting Game</h3>
+                <h3 className="font-display text-lg font-bold text-white">Hosting Game</h3>
                 {sessionWalletId && (
                   <AccountBadge address={sessionWalletId} label="Share this ID with opponent" />
                 )}
@@ -97,7 +106,7 @@ export default function LobbyScreen() {
                 </motion.div>
                 <button
                   onClick={() => setMode("choose")}
-                  className="text-xs text-gray-500 underline"
+                  className="cursor-pointer text-xs text-gray-500 underline"
                 >
                   Cancel
                 </button>
@@ -107,7 +116,7 @@ export default function LobbyScreen() {
             // Joining
             <GlassPanel>
               <div className="space-y-4">
-                <h3 className="text-center text-lg font-bold text-white">Join Game</h3>
+                <h3 className="font-display text-center text-lg font-bold text-white">Join Game</h3>
                 <div>
                   <label className="mb-1 block text-xs text-gray-400">
                     Host&apos;s Session Wallet ID
@@ -123,7 +132,7 @@ export default function LobbyScreen() {
                 <motion.button
                   onClick={() => join(joinInput)}
                   disabled={!joinInput || isWaiting}
-                  className="w-full rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 py-3 font-bold text-white shadow-lg disabled:opacity-50 active:scale-95"
+                  className="cursor-pointer w-full rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 py-3 font-bold text-white shadow-lg disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                 >
@@ -134,7 +143,7 @@ export default function LobbyScreen() {
                 )}
                 <button
                   onClick={() => setMode("choose")}
-                  className="block w-full text-center text-xs text-gray-500 underline"
+                  className="cursor-pointer block w-full text-center text-xs text-gray-500 underline"
                 >
                   Cancel
                 </button>

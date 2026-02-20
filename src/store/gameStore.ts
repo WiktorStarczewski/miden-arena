@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type { ChampionState, CommitData, RevealData, TurnRecord } from "../types";
 
-export type Screen = "loading" | "title" | "setup" | "lobby" | "draft" | "battle" | "gameOver";
+export type Screen = "loading" | "title" | "setup" | "lobby" | "draft" | "preBattleLoading" | "battle" | "gameOver";
 export type SetupStep = "idle" | "connecting" | "creatingWallet" | "funding" | "consuming" | "done";
 export type BattlePhase = "choosing" | "committing" | "waitingCommit" | "revealing" | "waitingReveal" | "resolving" | "animating";
 
@@ -21,12 +21,14 @@ interface MatchState {
   role: "host" | "joiner" | null;
 }
 
-interface DraftState {
+export interface DraftState {
   pool: number[];
   myTeam: number[];
   opponentTeam: number[];
   currentPicker: "me" | "opponent";
   pickNumber: number;
+  /** Note IDs from the opponent that existed before this game started. */
+  staleNoteIds: string[];
 }
 
 interface BattleState {
@@ -41,6 +43,8 @@ interface BattleState {
   myReveal: RevealData | null;
   opponentReveal: RevealData | null;
   turnLog: TurnRecord[];
+  /** Note IDs from the opponent that existed before battle started. */
+  staleNoteIds: string[];
 }
 
 interface ResultState {
@@ -69,12 +73,13 @@ export interface GameStore {
   setOpponent: (id: string, role: "host" | "joiner") => void;
 
   // Draft actions
-  initDraft: () => void;
+  initDraft: (staleNoteIds: string[]) => void;
+  restoreDraft: (draft: DraftState) => void;
   pickChampion: (championId: number, picker: "me" | "opponent") => void;
   setCurrentPicker: (picker: "me" | "opponent") => void;
 
   // Battle actions
-  initBattle: () => void;
+  initBattle: (staleNoteIds: string[]) => void;
   selectChampion: (id: number | null) => void;
   selectAbility: (index: number | null) => void;
   setBattlePhase: (phase: BattlePhase) => void;
@@ -110,6 +115,7 @@ const initialDraft: DraftState = {
   opponentTeam: [],
   currentPicker: "me",
   pickNumber: 0,
+  staleNoteIds: [],
 };
 
 const initialBattle: BattleState = {
@@ -124,6 +130,7 @@ const initialBattle: BattleState = {
   myReveal: null,
   opponentReveal: null,
   turnLog: [],
+  staleNoteIds: [],
 };
 
 const initialResult: ResultState = {
@@ -154,7 +161,7 @@ export const useGameStore = create<GameStore>((set) => ({
   setOpponent: (id, role) =>
     set({ match: { opponentId: id, role } }),
 
-  initDraft: () =>
+  initDraft: (staleNoteIds) =>
     set({
       draft: {
         pool: Array.from({ length: 10 }, (_, i) => i),
@@ -162,8 +169,11 @@ export const useGameStore = create<GameStore>((set) => ({
         opponentTeam: [],
         currentPicker: "me",
         pickNumber: 0,
+        staleNoteIds,
       },
     }),
+
+  restoreDraft: (draft) => set({ draft }),
 
   pickChampion: (championId, picker) =>
     set((state) => {
@@ -188,10 +198,11 @@ export const useGameStore = create<GameStore>((set) => ({
   setCurrentPicker: (picker) =>
     set((state) => ({ draft: { ...state.draft, currentPicker: picker } })),
 
-  initBattle: () =>
+  initBattle: (staleNoteIds) =>
     set((state) => ({
       battle: {
         ...initialBattle,
+        staleNoteIds,
         myChampions: state.draft.myTeam.map((id) => ({
           id,
           currentHp: getChampionHp(id),

@@ -61,18 +61,21 @@ export default function ChampionCard({
         <GlassPanel compact className="flex items-center gap-3">
           {/* Element accent bar */}
           <div
-            className="w-1 h-8 rounded-full flex-shrink-0"
+            className="w-1 h-10 rounded-full flex-shrink-0"
             style={{ backgroundColor: elementColor }}
           />
           <div className="flex items-center gap-2 min-w-0 flex-1">
-            <span className="font-bold text-sm text-white/90 truncate">
+            <span className="font-display font-bold text-base text-white/90 truncate">
               {champion.name}
             </span>
             <ElementBadge element={champion.element} size="sm" />
           </div>
-          <span className="text-xs text-white/50 tabular-nums flex-shrink-0">
-            {champion.hp} HP
-          </span>
+          <div className="flex items-center gap-3 flex-shrink-0 text-sm tabular-nums">
+            <span className="text-green-400/70">{champion.hp}<span className="text-white/30 ml-0.5 text-xs">HP</span></span>
+            <span className="text-red-400/70">{champion.attack}<span className="text-white/30 ml-0.5 text-xs">ATK</span></span>
+            <span className="text-blue-400/70">{champion.defense}<span className="text-white/30 ml-0.5 text-xs">DEF</span></span>
+            <span className="text-yellow-400/70">{champion.speed}<span className="text-white/30 ml-0.5 text-xs">SPD</span></span>
+          </div>
         </GlassPanel>
       </button>
     );
