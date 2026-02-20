@@ -11,6 +11,7 @@ import ChampionModel from "./ChampionModel";
 import ElementalAura from "./ElementalAura";
 import PostProcessing from "./PostProcessing";
 import DraftBackground from "./DraftBackground";
+import { IS_LOW_POWER } from "../utils/deviceCapabilities";
 
 // TYPES
 // ================================================================================================
@@ -144,8 +145,10 @@ const RotatingChampion = React.memo(function RotatingChampion({
 
 const DraftLighting = React.memo(function DraftLighting({
   elementColor,
+  lowPower = false,
 }: {
   elementColor: string;
+  lowPower?: boolean;
 }) {
   return (
     <>
@@ -159,7 +162,7 @@ const DraftLighting = React.memo(function DraftLighting({
         penumbra={0.8}
         intensity={2.0}
         color="#ffffff"
-        castShadow
+        castShadow={!lowPower}
         shadow-mapSize-width={1024}
         shadow-mapSize-height={1024}
         shadow-bias={-0.002}
@@ -226,7 +229,8 @@ const DraftSceneContent = React.memo(function DraftSceneContent({
   element,
   dragDeltaX,
   mousePosition,
-}: DraftStageProps & { dragDeltaX: number; mousePosition: React.RefObject<{ x: number; y: number }> }) {
+  lowPower = false,
+}: DraftStageProps & { dragDeltaX: number; mousePosition: React.RefObject<{ x: number; y: number }>; lowPower?: boolean }) {
   const elementColor = element
     ? ELEMENT_COLORS[element] ?? DEFAULT_COLOR
     : DEFAULT_COLOR;
@@ -237,13 +241,13 @@ const DraftSceneContent = React.memo(function DraftSceneContent({
       <fog attach="fog" args={["#12121e", 6, 18]} />
 
       {/* Themed parallax background */}
-      <DraftBackground championId={championId} mousePosition={mousePosition} />
+      <DraftBackground championId={championId} mousePosition={mousePosition} lowPower={lowPower} />
 
-      {/* Environment */}
-      <Environment preset="night" />
+      {/* Environment (skip HDR cubemap on low-power) */}
+      {!lowPower && <Environment preset="night" />}
 
       {/* Lighting */}
-      <DraftLighting elementColor={elementColor} />
+      <DraftLighting elementColor={elementColor} lowPower={lowPower} />
 
       {/* Scene group — shifted down so pedestal sits near bottom of viewport */}
       <group position={[0, -0.9, 0]}>
@@ -264,6 +268,7 @@ const DraftSceneContent = React.memo(function DraftSceneContent({
                 element={element}
                 position={[0, 0.2, 0]}
                 intensity={0.8}
+                lowPower={lowPower}
               />
             )}
           </>
@@ -279,6 +284,7 @@ const DraftSceneContent = React.memo(function DraftSceneContent({
         bloomIntensity={0.6}
         vignetteEnabled={true}
         hitFlash={false}
+        lowPower={lowPower}
       />
     </>
   );
@@ -288,7 +294,7 @@ const DraftSceneContent = React.memo(function DraftSceneContent({
 // ================================================================================================
 
 const DraftStage = React.memo(function DraftStage(props: DraftStageProps) {
-  const [dpr, setDpr] = useState(1.5);
+  const [dpr, setDpr] = useState(IS_LOW_POWER ? 1 : 1.5);
   const [dragDeltaX, setDragDeltaX] = useState(0);
   const mousePosition = useRef({ x: 0, y: 0 });
   const isDragging = useRef(false);
@@ -324,7 +330,7 @@ const DraftStage = React.memo(function DraftStage(props: DraftStageProps) {
 
   return (
     <Canvas
-      shadows
+      shadows={!IS_LOW_POWER}
       dpr={dpr}
       camera={{
         position: CAMERA_POSITION,
@@ -344,13 +350,17 @@ const DraftStage = React.memo(function DraftStage(props: DraftStageProps) {
       onPointerLeave={onPointerUp}
     >
       <Suspense fallback={null}>
-        <PerformanceMonitor
-          onIncline={() => setDpr(2)}
-          onDecline={() => setDpr(1)}
-        >
-          <AdaptiveDpr pixelated />
-          <DraftSceneContent {...props} dragDeltaX={dragDeltaX} mousePosition={mousePosition} />
-        </PerformanceMonitor>
+        {IS_LOW_POWER ? (
+          <DraftSceneContent {...props} dragDeltaX={dragDeltaX} mousePosition={mousePosition} lowPower />
+        ) : (
+          <PerformanceMonitor
+            onIncline={() => setDpr(2)}
+            onDecline={() => setDpr(1)}
+          >
+            <AdaptiveDpr pixelated />
+            <DraftSceneContent {...props} dragDeltaX={dragDeltaX} mousePosition={mousePosition} />
+          </PerformanceMonitor>
+        )}
       </Suspense>
     </Canvas>
   );

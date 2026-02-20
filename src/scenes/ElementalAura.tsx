@@ -24,6 +24,7 @@ interface ElementalAuraProps {
   position: [number, number, number];
   intensity?: number;
   performanceScale?: number;
+  lowPower?: boolean;
 }
 
 // ELEMENT CONFIGURATIONS
@@ -715,6 +716,7 @@ const ElementalAura = React.memo(function ElementalAura({
   position,
   intensity = 1.0,
   performanceScale = 1.0,
+  lowPower = false,
 }: ElementalAuraProps) {
   const config = ELEMENT_CONFIGS[element];
   const secondary = SECONDARY_CONFIGS[element];
@@ -727,6 +729,25 @@ const ElementalAura = React.memo(function ElementalAura({
     config.scale[1] * intensity,
     config.scale[2] * intensity,
   ];
+
+  // Low-power: only primary sparkle layer at ~15% count, skip everything else
+  if (lowPower) {
+    return (
+      <group position={position}>
+        <AuraGroup element={element} intensity={intensity}>
+          <Sparkles
+            count={scaledCount(config.count, intensity, perf * 0.15)}
+            speed={config.speed * intensity}
+            size={config.size * intensity}
+            scale={scaledPrimary}
+            color={config.color}
+            opacity={config.opacity}
+            noise={config.noise}
+          />
+        </AuraGroup>
+      </group>
+    );
+  }
 
   const scaledSecondary: [number, number, number] = [
     (secondary.scale?.[0] ?? 1) * intensity,

@@ -34,6 +34,7 @@ interface ThemeConfig {
 interface DraftBackgroundProps {
   championId: number | null;
   mousePosition: React.RefObject<{ x: number; y: number }>;
+  lowPower?: boolean;
 }
 
 // SEEDED PRNG
@@ -634,6 +635,7 @@ const ParallaxLayer = React.memo(function ParallaxLayer({
 const DraftBackground = React.memo(function DraftBackground({
   championId,
   mousePosition,
+  lowPower = false,
 }: DraftBackgroundProps) {
   const scene = useThree((state) => state.scene);
   const theme = championId !== null ? (THEMES[championId] ?? DEFAULT_THEME) : DEFAULT_THEME;
@@ -673,7 +675,7 @@ const DraftBackground = React.memo(function DraftBackground({
       <ParallaxLayer mousePosition={mousePosition} depthFactor={0.5}>
         <AtmosphericParticles
           color={theme.particleColor}
-          count={theme.particleCount}
+          count={lowPower ? Math.round(theme.particleCount * 0.15) : theme.particleCount}
           size={theme.particleSize}
           speed={theme.particleSpeed}
           direction={theme.particleDirection}

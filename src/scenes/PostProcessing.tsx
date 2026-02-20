@@ -9,6 +9,7 @@ interface PostProcessingProps {
   bloomIntensity?: number;
   vignetteEnabled?: boolean;
   hitFlash?: boolean;
+  lowPower?: boolean;
 }
 
 // CONSTANTS
@@ -67,6 +68,7 @@ const PostProcessing = React.memo(function PostProcessing({
   bloomIntensity = DEFAULT_BLOOM_INTENSITY,
   vignetteEnabled = true,
   hitFlash = false,
+  lowPower = false,
 }: PostProcessingProps) {
   const [performanceLevel, setPerformanceLevel] = useState<
     "high" | "low"
@@ -77,6 +79,7 @@ const PostProcessing = React.memo(function PostProcessing({
   const lastCheckRef = useRef(0);
 
   useFrame(() => {
+    if (lowPower) return;
     const now = performance.now();
     frameTimesRef.current.push(now);
 
@@ -101,6 +104,8 @@ const PostProcessing = React.memo(function PostProcessing({
     bloomIntensity,
     hitFlash
   );
+
+  if (lowPower) return null;
 
   const isHighQuality = performanceLevel === "high";
   const bloomRadius = isHighQuality ? BLOOM_RADIUS : LOW_BLOOM_RADIUS;

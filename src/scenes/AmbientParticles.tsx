@@ -15,6 +15,7 @@ import {
 
 interface AmbientParticlesProps {
   performanceScale?: number;
+  lowPower?: boolean;
 }
 
 // FLOATING LIGHT ORBS (larger, slow-moving glowing spheres)
@@ -312,7 +313,10 @@ const BackgroundWisps = React.memo(function BackgroundWisps({
 
 const AmbientParticles = React.memo(function AmbientParticles({
   performanceScale = 1.0,
+  lowPower = false,
 }: AmbientParticlesProps) {
+  if (lowPower) return null;
+
   const orbCount = Math.round(15 * performanceScale);
   const dustCount = Math.round(40 * performanceScale);
   const wispCount = Math.round(8 * performanceScale);
