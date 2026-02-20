@@ -37,7 +37,7 @@ function QualityToggle() {
       {/* Sliding pill */}
       <span
         className="
-          absolute top-[2px] h-[20px] w-[24px] rounded-full
+          absolute top-1/2 -translate-y-1/2 h-[20px] w-[24px] rounded-full
           flex items-center justify-center
           text-[9px] font-bold tracking-wide leading-none
           transition-all duration-200 ease-in-out select-none
