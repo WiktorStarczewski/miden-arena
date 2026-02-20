@@ -243,8 +243,12 @@ const DraftSceneContent = React.memo(function DraftSceneContent({
       {/* Themed parallax background */}
       <DraftBackground championId={championId} mousePosition={mousePosition} lowPower={lowPower} />
 
-      {/* Environment (skip HDR cubemap on low-power) */}
-      {!lowPower && <Environment preset="night" />}
+      {/* Environment (skip HDR cubemap on low-power, use a dark gradient-friendly color instead) */}
+      {lowPower ? (
+        <color attach="background" args={["#12121e"]} />
+      ) : (
+        <Environment preset="night" />
+      )}
 
       {/* Lighting */}
       <DraftLighting elementColor={elementColor} lowPower={lowPower} />
