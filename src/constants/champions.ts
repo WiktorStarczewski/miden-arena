@@ -1,5 +1,7 @@
 import type { Champion } from "../types";
 
+const BASE = import.meta.env.BASE_URL;
+
 export const CHAMPIONS: Champion[] = [
   {
     id: 0,
@@ -9,7 +11,7 @@ export const CHAMPIONS: Champion[] = [
     defense: 5,
     speed: 16,
     element: "fire",
-    modelPath: "/models/inferno.glb",
+    modelPath: `${BASE}models/inferno.glb`,
     abilities: [
       { name: "Eruption", power: 35, type: "damage", description: "Erupts with volcanic fury" },
       { name: "Scorch", power: 15, type: "damage_dot", appliesBurn: true, duration: 3, description: "Burns target for 3 turns" },
@@ -23,7 +25,7 @@ export const CHAMPIONS: Champion[] = [
     defense: 16,
     speed: 5,
     element: "earth",
-    modelPath: "/models/boulder.glb",
+    modelPath: `${BASE}models/boulder.glb`,
     abilities: [
       { name: "Rock Slam", power: 28, type: "damage", description: "Smashes with a massive boulder" },
       { name: "Fortify", power: 0, type: "buff", stat: "defense", statValue: 6, duration: 2, description: "Hardens skin like stone (+6 DEF)" },
@@ -37,7 +39,7 @@ export const CHAMPIONS: Champion[] = [
     defense: 8,
     speed: 14,
     element: "fire",
-    modelPath: "/models/ember.glb",
+    modelPath: `${BASE}models/ember.glb`,
     abilities: [
       { name: "Fireball", power: 25, type: "damage", description: "Hurls a blazing fireball" },
       { name: "Flame Shield", power: 0, type: "buff", stat: "defense", statValue: 5, duration: 2, description: "Wraps in protective flames (+5 DEF)" },
@@ -51,7 +53,7 @@ export const CHAMPIONS: Champion[] = [
     defense: 12,
     speed: 10,
     element: "water",
-    modelPath: "/models/torrent.glb",
+    modelPath: `${BASE}models/torrent.glb`,
     abilities: [
       { name: "Tidal Wave", power: 22, type: "damage", description: "Unleashes a crushing wave" },
       { name: "Heal", power: 0, type: "heal", healAmount: 25, description: "Restores 25 HP with healing waters" },
@@ -65,7 +67,7 @@ export const CHAMPIONS: Champion[] = [
     defense: 6,
     speed: 18,
     element: "wind",
-    modelPath: "/models/gale.glb",
+    modelPath: `${BASE}models/gale.glb`,
     abilities: [
       { name: "Wind Blade", power: 24, type: "damage", description: "Slices with razor-sharp wind" },
       { name: "Haste", power: 0, type: "buff", stat: "speed", statValue: 5, duration: 2, description: "Accelerates to blinding speed (+5 SPD)" },
@@ -79,7 +81,7 @@ export const CHAMPIONS: Champion[] = [
     defense: 14,
     speed: 9,
     element: "water",
-    modelPath: "/models/tide.glb",
+    modelPath: `${BASE}models/tide.glb`,
     abilities: [
       { name: "Whirlpool", power: 20, type: "damage", description: "Drags foe into a whirlpool" },
       { name: "Mist", power: 0, type: "debuff", stat: "attack", statValue: 4, duration: 2, description: "Shrouds enemy in mist (-4 ATK)" },
@@ -93,7 +95,7 @@ export const CHAMPIONS: Champion[] = [
     defense: 15,
     speed: 7,
     element: "earth",
-    modelPath: "/models/quake.glb",
+    modelPath: `${BASE}models/quake.glb`,
     abilities: [
       { name: "Earthquake", power: 26, type: "damage", description: "Shakes the earth violently" },
       { name: "Stone Wall", power: 0, type: "buff", stat: "defense", statValue: 8, duration: 1, description: "Raises a stone barrier (+8 DEF)" },
@@ -107,7 +109,7 @@ export const CHAMPIONS: Champion[] = [
     defense: 7,
     speed: 15,
     element: "wind",
-    modelPath: "/models/storm.glb",
+    modelPath: `${BASE}models/storm.glb`,
     abilities: [
       { name: "Lightning", power: 30, type: "damage", description: "Strikes with lightning" },
       { name: "Dodge", power: 0, type: "buff", stat: "speed", statValue: 6, duration: 2, description: "Enhances evasive reflexes (+6 SPD)" },
@@ -121,7 +123,7 @@ export const CHAMPIONS: Champion[] = [
     defense: 4,
     speed: 17,
     element: "fire",
-    modelPath: "/models/phoenix.glb",
+    modelPath: `${BASE}models/phoenix.glb`,
     abilities: [
       { name: "Blaze", power: 38, type: "damage", description: "Engulfs in an inferno" },
       { name: "Rebirth", power: 0, type: "heal", healAmount: 30, description: "Rises from ashes (+30 HP)" },
@@ -135,7 +137,7 @@ export const CHAMPIONS: Champion[] = [
     defense: 16,
     speed: 6,
     element: "water",
-    modelPath: "/models/kraken.glb",
+    modelPath: `${BASE}models/kraken.glb`,
     abilities: [
       { name: "Depth Charge", power: 24, type: "damage", description: "Launches a pressurized blast" },
       { name: "Shell", power: 0, type: "buff", stat: "defense", statValue: 7, duration: 2, description: "Retreats into armored shell (+7 DEF)" },

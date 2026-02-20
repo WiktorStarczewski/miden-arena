@@ -35,6 +35,7 @@ import {
   type CameraShakeConfig,
 } from "./AttackEffect";
 import PostProcessing from "./PostProcessing";
+import { useLowPower } from "../utils/deviceCapabilities";
 
 // TYPES
 // ================================================================================================
@@ -172,12 +173,13 @@ interface KoExplosionProps {
 }
 
 const KO_DURATION = 1.5; // seconds
-const KO_PARTICLE_COUNT = 80;
 
 const KoExplosion = React.memo(function KoExplosion({
   position,
   active,
 }: KoExplosionProps) {
+  const lowPower = useLowPower();
+  const KO_PARTICLE_COUNT = lowPower ? 20 : 80;
   const pointsRef = useRef<Points>(null);
   const flashRef = useRef<Mesh>(null);
   const ring1Ref = useRef<Mesh>(null);
@@ -227,7 +229,7 @@ const KoExplosion = React.memo(function KoExplosion({
     });
 
     return { geometry: geo, material: mat, velocities: vels };
-  }, []);
+  }, [KO_PARTICLE_COUNT]);
 
   useFrame((_, delta) => {
     if (!visible) return;
@@ -325,33 +327,37 @@ const KoExplosion = React.memo(function KoExplosion({
       {/* Debris particles */}
       <points ref={pointsRef} geometry={geometry} material={material} />
 
-      {/* Intense sparkles */}
-      <Sparkles
-        count={50}
-        speed={5}
-        size={6}
-        color="#ff6644"
-        scale={[2, 2, 2]}
-        opacity={0.9}
-        noise={5}
-      />
-      <Sparkles
-        count={30}
-        speed={3}
-        size={4}
-        color="#ffaa44"
-        scale={[3, 3, 3]}
-        opacity={0.6}
-        noise={3}
-      />
+      {!lowPower && (
+        <>
+          {/* Intense sparkles */}
+          <Sparkles
+            count={50}
+            speed={5}
+            size={6}
+            color="#ff6644"
+            scale={[2, 2, 2]}
+            opacity={0.9}
+            noise={5}
+          />
+          <Sparkles
+            count={30}
+            speed={3}
+            size={4}
+            color="#ffaa44"
+            scale={[3, 3, 3]}
+            opacity={0.6}
+            noise={3}
+          />
 
-      {/* Bright KO light */}
-      <pointLight
-        color="#ff4444"
-        intensity={8 * Math.max(0, 1 - progressRef.current * 2)}
-        distance={10}
-        decay={2}
-      />
+          {/* Bright KO light */}
+          <pointLight
+            color="#ff4444"
+            intensity={8 * Math.max(0, 1 - progressRef.current * 2)}
+            distance={10}
+            decay={2}
+          />
+        </>
+      )}
     </group>
   );
 });
@@ -363,11 +369,11 @@ interface VictoryCelebrationProps {
   active: boolean;
 }
 
-const VICTORY_PARTICLE_COUNT = 120;
-
 const VictoryCelebration = React.memo(function VictoryCelebration({
   active,
 }: VictoryCelebrationProps) {
+  const lowPower = useLowPower();
+  const VICTORY_PARTICLE_COUNT = lowPower ? 30 : 120;
   const pointsRef = useRef<Points>(null);
   const [visible, setVisible] = useState(false);
 
@@ -424,7 +430,7 @@ const VictoryCelebration = React.memo(function VictoryCelebration({
     });
 
     return { geometry: geo, material: mat, particleData: data };
-  }, []);
+  }, [VICTORY_PARTICLE_COUNT]);
 
   useFrame(() => {
     if (!visible || !pointsRef.current) return;
@@ -460,43 +466,47 @@ const VictoryCelebration = React.memo(function VictoryCelebration({
     <group>
       <points ref={pointsRef} geometry={geometry} material={material} />
 
-      {/* Additional sparkle layers for richness */}
-      <Sparkles
-        count={60}
-        speed={1}
-        size={3}
-        color="#ffd700"
-        scale={[10, 6, 6]}
-        opacity={0.5}
-        noise={2}
-      />
-      <Sparkles
-        count={30}
-        speed={0.5}
-        size={4}
-        color="#fff8e1"
-        scale={[8, 5, 5]}
-        opacity={0.3}
-        noise={1}
-      />
-      <Sparkles
-        count={20}
-        speed={1.5}
-        size={2}
-        color="#ffab00"
-        scale={[12, 4, 8]}
-        opacity={0.4}
-        noise={3}
-      />
+      {!lowPower && (
+        <>
+          {/* Additional sparkle layers for richness */}
+          <Sparkles
+            count={60}
+            speed={1}
+            size={3}
+            color="#ffd700"
+            scale={[10, 6, 6]}
+            opacity={0.5}
+            noise={2}
+          />
+          <Sparkles
+            count={30}
+            speed={0.5}
+            size={4}
+            color="#fff8e1"
+            scale={[8, 5, 5]}
+            opacity={0.3}
+            noise={1}
+          />
+          <Sparkles
+            count={20}
+            speed={1.5}
+            size={2}
+            color="#ffab00"
+            scale={[12, 4, 8]}
+            opacity={0.4}
+            noise={3}
+          />
 
-      {/* Warm golden light from above */}
-      <pointLight
-        color="#ffd700"
-        intensity={1.5}
-        distance={12}
-        decay={2}
-        position={[0, 5, 0]}
-      />
+          {/* Warm golden light from above */}
+          <pointLight
+            color="#ffd700"
+            intensity={1.5}
+            distance={12}
+            decay={2}
+            position={[0, 5, 0]}
+          />
+        </>
+      )}
     </group>
   );
 });
@@ -518,6 +528,7 @@ const SelfEffect = React.memo(function SelfEffect({
   position: [number, number, number];
   type: "buff" | "heal";
 }) {
+  const lowPower = useLowPower();
   const ringRef = useRef<Mesh>(null);
   const progressRef = useRef(0);
   const [visible, setVisible] = useState(true);
@@ -557,33 +568,37 @@ const SelfEffect = React.memo(function SelfEffect({
         />
       </mesh>
 
-      {/* Rising sparkles */}
-      <Sparkles
-        count={30}
-        speed={3}
-        size={4}
-        color={colors.primary}
-        scale={[1.5, 2.5, 1.5]}
-        opacity={0.8}
-        noise={2}
-      />
-      <Sparkles
-        count={20}
-        speed={2}
-        size={3}
-        color={colors.secondary}
-        scale={[2, 3, 2]}
-        opacity={0.5}
-        noise={1}
-      />
+      {!lowPower && (
+        <>
+          {/* Rising sparkles */}
+          <Sparkles
+            count={30}
+            speed={3}
+            size={4}
+            color={colors.primary}
+            scale={[1.5, 2.5, 1.5]}
+            opacity={0.8}
+            noise={2}
+          />
+          <Sparkles
+            count={20}
+            speed={2}
+            size={3}
+            color={colors.secondary}
+            scale={[2, 3, 2]}
+            opacity={0.5}
+            noise={1}
+          />
 
-      {/* Glow light */}
-      <pointLight
-        color={colors.primary}
-        intensity={3}
-        distance={4}
-        decay={2}
-      />
+          {/* Glow light */}
+          <pointLight
+            color={colors.primary}
+            intensity={3}
+            distance={4}
+            decay={2}
+          />
+        </>
+      )}
     </group>
   );
 });
@@ -669,9 +684,11 @@ const SceneContent = React.memo(function SceneContent({
   showVictory,
   indicators,
   performanceScale,
+  lowPower,
 }: ArenaSceneProps & {
   hitFlash: boolean;
   performanceScale: number;
+  lowPower: boolean;
 }) {
   const myColor = myChampion?.element
     ? ELEMENT_COLORS[myChampion.element] ?? DEFAULT_ELEMENT_COLOR
@@ -714,10 +731,10 @@ const SceneContent = React.memo(function SceneContent({
       <CameraController />
 
       {/* Arena environment (ground, lights, fog, ambient particles) */}
-      <ArenaEnvironment performanceScale={performanceScale} />
+      <ArenaEnvironment performanceScale={performanceScale} lowPower={lowPower} />
 
       {/* Dedicated ambient particle system */}
-      <AmbientParticles performanceScale={performanceScale} />
+      <AmbientParticles performanceScale={performanceScale} lowPower={lowPower} />
 
       {/* Left champion (player) */}
       {myChampion && (
@@ -739,6 +756,7 @@ const SceneContent = React.memo(function SceneContent({
               ]}
               intensity={myChampion.animation === "idle" ? 0.6 : 1.0}
               performanceScale={performanceScale}
+              lowPower={lowPower}
             />
           )}
         </>
@@ -766,6 +784,7 @@ const SceneContent = React.memo(function SceneContent({
                 opponentChampion.animation === "idle" ? 0.6 : 1.0
               }
               performanceScale={performanceScale}
+              lowPower={lowPower}
             />
           )}
         </>
@@ -814,6 +833,7 @@ const SceneContent = React.memo(function SceneContent({
         bloomIntensity={0.8}
         vignetteEnabled={true}
         hitFlash={hitFlash}
+        lowPower={lowPower}
       />
     </>
   );
@@ -832,9 +852,21 @@ const ArenaScene = React.memo(function ArenaScene({
   showVictory,
   indicators,
 }: ArenaSceneProps) {
-  const [dpr, setDpr] = useState(1.5);
+  const lowPower = useLowPower();
+  const [dpr, setDpr] = useState(lowPower ? 1 : 1.5);
   const [hitFlash, setHitFlash] = useState(false);
-  const [performanceScale, setPerformanceScale] = useState(1.0);
+  const [performanceScale, setPerformanceScale] = useState(lowPower ? 0.5 : 1.0);
+
+  // Sync DPR / performanceScale when lowPower toggle changes
+  useEffect(() => {
+    if (lowPower) {
+      setDpr(1);
+      setPerformanceScale(0.5);
+    } else {
+      setDpr(1.5);
+      setPerformanceScale(1.0);
+    }
+  }, [lowPower]);
 
   // Trigger hit flash when attack completes, plus camera shake + SFX
   const handleAttackComplete = useCallback(() => {
@@ -857,8 +889,9 @@ const ArenaScene = React.memo(function ArenaScene({
 
   return (
     <Canvas
-      shadows
+      shadows={!lowPower}
       dpr={dpr}
+      resize={{ offsetSize: true }}
       camera={{
         position: CAMERA_POSITION,
         fov: 40,
@@ -872,17 +905,7 @@ const ArenaScene = React.memo(function ArenaScene({
       }}
     >
       <Suspense fallback={null}>
-        <PerformanceMonitor
-          onIncline={() => {
-            setDpr(2);
-            setPerformanceScale(1.0);
-          }}
-          onDecline={() => {
-            setDpr(1);
-            setPerformanceScale(0.5);
-          }}
-        >
-          <AdaptiveDpr pixelated />
+        {lowPower ? (
           <SceneContent
             myChampion={myChampion}
             opponentChampion={opponentChampion}
@@ -894,8 +917,35 @@ const ArenaScene = React.memo(function ArenaScene({
             showVictory={showVictory}
             indicators={indicators}
             performanceScale={performanceScale}
+            lowPower
           />
-        </PerformanceMonitor>
+        ) : (
+          <PerformanceMonitor
+            onIncline={() => {
+              setDpr(2);
+              setPerformanceScale(1.0);
+            }}
+            onDecline={() => {
+              setDpr(1);
+              setPerformanceScale(0.5);
+            }}
+          >
+            <AdaptiveDpr pixelated />
+            <SceneContent
+              myChampion={myChampion}
+              opponentChampion={opponentChampion}
+              attackEffect={attackEffect}
+              selfEffect={selfEffect}
+              onAttackComplete={handleAttackComplete}
+              hitFlash={hitFlash}
+              koTarget={koTarget}
+              showVictory={showVictory}
+              indicators={indicators}
+              performanceScale={performanceScale}
+              lowPower={false}
+            />
+          </PerformanceMonitor>
+        )}
       </Suspense>
     </Canvas>
   );

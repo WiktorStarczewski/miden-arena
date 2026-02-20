@@ -2,6 +2,7 @@ import React from "react";
 import { useAccount } from "@miden-sdk/react";
 import { useGameStore } from "../../store/gameStore";
 import { formatMiden } from "../../utils/formatting";
+import { IS_MOBILE, useLowPowerStore } from "../../utils/deviceCapabilities";
 import GlassPanel from "./GlassPanel";
 
 interface GameLayoutProps {
@@ -9,6 +10,53 @@ interface GameLayoutProps {
   title?: string;
   showBackButton?: boolean;
   onBack?: () => void;
+}
+
+function QualityToggle() {
+  const { lowPower, toggle } = useLowPowerStore();
+
+  // Never show on mobile — always forced to SD
+  if (IS_MOBILE) return null;
+
+  return (
+    <button
+      onClick={toggle}
+      className="
+        relative flex items-center h-6 w-[52px] rounded-full cursor-pointer
+        border border-white/10 transition-colors duration-200
+        focus:outline-none focus-visible:ring-1 focus-visible:ring-white/30
+      "
+      style={{
+        background: lowPower
+          ? "rgba(255,255,255,0.06)"
+          : "rgba(99,102,241,0.25)",
+      }}
+      aria-label={`Switch to ${lowPower ? "HD" : "SD"} rendering`}
+      title={lowPower ? "Low quality — click for HD" : "High quality — click for SD"}
+    >
+      {/* Sliding pill */}
+      <span
+        className="
+          absolute top-1/2 -translate-y-1/2 h-[20px] w-[24px] rounded-full
+          flex items-center justify-center
+          text-[9px] font-bold tracking-wide leading-none
+          transition-all duration-200 ease-in-out select-none
+        "
+        style={{
+          left: lowPower ? "2px" : "24px",
+          background: lowPower
+            ? "rgba(255,255,255,0.15)"
+            : "rgba(99,102,241,0.7)",
+          color: lowPower
+            ? "rgba(255,255,255,0.5)"
+            : "#fff",
+          textShadow: lowPower ? "none" : "0 0 6px rgba(99,102,241,0.6)",
+        }}
+      >
+        {lowPower ? "SD" : "HD"}
+      </span>
+    </button>
+  );
 }
 
 function BalanceDisplay() {
@@ -37,7 +85,8 @@ export default function GameLayout({
     <div className="h-screen bg-[#0a0a1a] text-[#e0e0e0] flex flex-col overflow-hidden">
       {/* Top bar */}
       <header className="sticky top-0 z-50 px-3 pt-3">
-        <GlassPanel compact className="flex items-center justify-between">
+        <GlassPanel compact className="grid grid-cols-3 items-center">
+          {/* Left: back button + title */}
           <div className="flex items-center gap-3">
             {showBackButton && (
               <button
@@ -70,8 +119,13 @@ export default function GameLayout({
             )}
           </div>
 
-          {/* Balance + Sync status */}
-          <div className="flex items-center gap-3">
+          {/* Center: quality toggle */}
+          <div className="flex justify-center">
+            <QualityToggle />
+          </div>
+
+          {/* Right: Balance + Sync status */}
+          <div className="flex items-center justify-end gap-3">
             <BalanceDisplay />
             <span className="text-xs text-white/40">Miden Arena</span>
             <div className="relative flex items-center justify-center w-3 h-3">

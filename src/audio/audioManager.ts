@@ -57,24 +57,27 @@ let currentVoice: AudioBufferSourceNode | null = null;
 // Use m4a since macOS afconvert produces m4a (no ffmpeg for mp3)
 const AUDIO_EXT = "m4a";
 
+/** Vite's configured base path (e.g. "/miden-arena/" on GitHub Pages, "/" locally) */
+const BASE = import.meta.env.BASE_URL;
+
 /**
  * Each screen has a playlist of tracks that play sequentially.
  * When the last track ends, it loops back to the first.
  */
 const MUSIC_PLAYLISTS: Record<MusicTrack, string[]> = {
   menu: [
-    `/audio/music/menu_1.${AUDIO_EXT}`,
-    `/audio/music/menu_2.${AUDIO_EXT}`,
-    `/audio/music/menu_3.${AUDIO_EXT}`,
+    `${BASE}audio/music/menu_1.${AUDIO_EXT}`,
+    `${BASE}audio/music/menu_2.${AUDIO_EXT}`,
+    `${BASE}audio/music/menu_3.${AUDIO_EXT}`,
   ],
   draft: [
-    `/audio/music/draft_1.${AUDIO_EXT}`,
-    `/audio/music/draft_2.${AUDIO_EXT}`,
+    `${BASE}audio/music/draft_1.${AUDIO_EXT}`,
+    `${BASE}audio/music/draft_2.${AUDIO_EXT}`,
   ],
   battle: [
-    `/audio/music/battle_1.${AUDIO_EXT}`,
-    `/audio/music/battle_2.${AUDIO_EXT}`,
-    `/audio/music/battle_3.${AUDIO_EXT}`,
+    `${BASE}audio/music/battle_1.${AUDIO_EXT}`,
+    `${BASE}audio/music/battle_2.${AUDIO_EXT}`,
+    `${BASE}audio/music/battle_3.${AUDIO_EXT}`,
   ],
 };
 
@@ -109,7 +112,7 @@ async function loadBuffer(url: string): Promise<AudioBuffer | null> {
 
 async function preloadSfx(): Promise<void> {
   const loads = SFX_NAMES.map(async (name) => {
-    const buffer = await loadBuffer(`/audio/sfx/${name}.${AUDIO_EXT}`);
+    const buffer = await loadBuffer(`${BASE}audio/sfx/${name}.${AUDIO_EXT}`);
     if (buffer) sfxBuffers.set(name, buffer);
   });
   await Promise.all(loads);
@@ -117,7 +120,7 @@ async function preloadSfx(): Promise<void> {
 
 async function preloadVoices(): Promise<void> {
   const loads = CHAMPION_NAMES.map(async (name) => {
-    const buffer = await loadBuffer(`/audio/voices/${name}.${AUDIO_EXT}`);
+    const buffer = await loadBuffer(`${BASE}audio/voices/${name}.${AUDIO_EXT}`);
     if (buffer) voiceBuffers.set(name, buffer);
   });
   await Promise.all(loads);

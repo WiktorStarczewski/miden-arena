@@ -40,7 +40,15 @@ export default defineConfig({
     },
   },
   build: {
-    target: "es2020",
+    target: "esnext",
+  },
+  worker: {
+    format: "es",
+    rollupOptions: {
+      output: {
+        format: "es",
+      },
+    },
   },
   optimizeDeps: {
     exclude: ["@miden-sdk/miden-sdk"],

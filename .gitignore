@@ -5,9 +5,8 @@ dist/
 .env.*
 !.env.example
 
-# Intermediate model build artifacts (keep only merged GLBs)
+# Source model files (FBX)
 public/models/*.fbx
-public/models/*.*.glb
 
 # Build scripts for model conversion
 convert_fbx_to_glb.py

@@ -58,6 +58,7 @@ export interface UseSessionWalletReturn {
   isExtensionDetected: boolean;
   isConnected: boolean;
   isReady: boolean;
+  isDetecting: boolean;
   step: "idle" | "connecting" | "creatingWallet" | "funding" | "consuming" | "done";
   midenFiAddress: string | null;
   sessionWalletId: string | null;
@@ -95,6 +96,7 @@ export function useSessionWallet(): UseSessionWalletReturn {
   const setSessionWalletId = useGameStore((s) => s.setSessionWalletId);
 
   const [error, setError] = useState<string | null>(null);
+  const [isDetecting, setIsDetecting] = useState(false);
 
   // MidenProvider — local session client
   const { client, isReady: clientReady, prover, runExclusive } = useMiden();
@@ -311,10 +313,47 @@ export function useSessionWallet(): UseSessionWalletReturn {
     setError(null);
     clearSessionData();
     try {
-      setSetupStep("connecting");
-      if (wallets.length > 0) {
-        select(wallets[0].adapter.name);
+      if (wallets.length === 0) {
+        setError("No wallet adapter found.");
+        return;
       }
+
+      const adapter = wallets[0].adapter;
+
+      // If the extension hasn't been detected yet, wait for the polling to find it.
+      if (adapter.readyState !== WalletReadyState.Installed) {
+        setIsDetecting(true);
+        try {
+          await new Promise<void>((resolve, reject) => {
+            const TIMEOUT_MS = 5000;
+            const timer = setTimeout(() => {
+              adapter.off("readyStateChange", onReady);
+              reject(new Error("Wallet extension not detected. Is MidenFi installed?"));
+            }, TIMEOUT_MS);
+
+            const onReady = (state: WalletReadyState) => {
+              if (state === WalletReadyState.Installed) {
+                clearTimeout(timer);
+                adapter.off("readyStateChange", onReady);
+                resolve();
+              }
+            };
+            adapter.on("readyStateChange", onReady);
+
+            // Check once more in case it became ready between the if-check and now
+            if (adapter.readyState === WalletReadyState.Installed) {
+              clearTimeout(timer);
+              adapter.off("readyStateChange", onReady);
+              resolve();
+            }
+          });
+        } finally {
+          setIsDetecting(false);
+        }
+      }
+
+      setSetupStep("connecting");
+      select(adapter.name);
       await walletConnect(PrivateDataPermission.UponRequest, WalletAdapterNetwork.Testnet);
     } catch (err) {
       console.error("[useSessionWallet] walletConnect error:", err);
@@ -330,6 +369,7 @@ export function useSessionWallet(): UseSessionWalletReturn {
     isExtensionDetected,
     isConnected: midenFiAddress !== null,
     isReady: setupStep === "done",
+    isDetecting,
     step: setupStep,
     midenFiAddress,
     sessionWalletId,

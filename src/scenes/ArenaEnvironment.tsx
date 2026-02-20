@@ -23,6 +23,7 @@ interface ArenaEnvironmentProps {
   groundColor?: string;
   ambientIntensity?: number;
   performanceScale?: number;
+  lowPower?: boolean;
 }
 
 // GRADIENT MAP
@@ -341,8 +342,10 @@ const ArenaGround = React.memo(function ArenaGround({
 
 const ArenaLighting = React.memo(function ArenaLighting({
   ambientIntensity,
+  lowPower = false,
 }: {
   ambientIntensity: number;
+  lowPower?: boolean;
 }) {
   return (
     <>
@@ -354,7 +357,7 @@ const ArenaLighting = React.memo(function ArenaLighting({
         position={[5, 8, 3]}
         intensity={1.2}
         color="#ffeedd"
-        castShadow
+        castShadow={!lowPower}
         shadow-mapSize-width={1024}
         shadow-mapSize-height={1024}
         shadow-camera-left={-6}
@@ -438,6 +441,7 @@ const ArenaEnvironment = React.memo(function ArenaEnvironment({
   groundColor = "#2a2a3a",
   ambientIntensity = 0.35,
   performanceScale = 1.0,
+  lowPower = false,
 }: ArenaEnvironmentProps) {
   const dustCount = Math.round(80 * performanceScale);
   const wispCount = Math.round(20 * performanceScale);
@@ -448,49 +452,59 @@ const ArenaEnvironment = React.memo(function ArenaEnvironment({
       {/* Fog for atmospheric depth */}
       <fog attach="fog" args={[fogColor, fogNear, fogFar]} />
 
-      {/* Night sky backdrop + environment map for reflections */}
-      <Environment preset="night" background />
+      {/* Night sky backdrop + environment map for reflections (skip HDR cubemap on low-power) */}
+      {lowPower ? (
+        <color attach="background" args={["#1a1a2e"]} />
+      ) : (
+        <Environment preset="night" background />
+      )}
 
       {/* Lighting */}
-      <ArenaLighting ambientIntensity={ambientIntensity} />
+      <ArenaLighting ambientIntensity={ambientIntensity} lowPower={lowPower} />
 
       {/* Ground and arena elements */}
       <ArenaGround groundColor={groundColor} />
 
-      {/* Contact shadows for grounding characters */}
-      <ContactShadows
-        position={[0, -0.02, 0]}
-        opacity={0.6}
-        scale={12}
-        blur={2.5}
-        far={4}
-        color="#000020"
-      />
+      {/* Contact shadows for grounding characters (skip on low-power — off-screen render pass) */}
+      {!lowPower && (
+        <ContactShadows
+          position={[0, -0.02, 0]}
+          opacity={0.6}
+          scale={12}
+          blur={2.5}
+          far={4}
+          color="#000020"
+        />
+      )}
 
-      {/* --- AMBIENT PARTICLE SYSTEMS --- */}
+      {!lowPower && (
+        <>
+          {/* --- AMBIENT PARTICLE SYSTEMS --- */}
 
-      {/* Floating dust motes throughout the arena */}
-      <DustMotes count={dustCount} areaSize={14} />
+          {/* Floating dust motes throughout the arena */}
+          <DustMotes count={dustCount} areaSize={14} />
 
-      {/* Magical energy wisps drifting across the scene */}
-      <EnergyWisps count={wispCount} />
+          {/* Magical energy wisps drifting across the scene */}
+          <EnergyWisps count={wispCount} />
 
-      {/* Firefly-like sparkles in the background */}
-      <FireflySparkles count={fireflyCount} />
+          {/* Firefly-like sparkles in the background */}
+          <FireflySparkles count={fireflyCount} />
 
-      {/* Pillar glow effects */}
-      <PillarGlows />
+          {/* Pillar glow effects */}
+          <PillarGlows />
 
-      {/* Broad ambient sparkles across the arena for magical feel */}
-      <Sparkles
-        count={Math.round(30 * performanceScale)}
-        speed={0.2}
-        size={1.5}
-        color="#6644aa"
-        scale={[14, 5, 10]}
-        opacity={0.12}
-        noise={1.0}
-      />
+          {/* Broad ambient sparkles across the arena for magical feel */}
+          <Sparkles
+            count={Math.round(30 * performanceScale)}
+            speed={0.2}
+            size={1.5}
+            color="#6644aa"
+            scale={[14, 5, 10]}
+            opacity={0.12}
+            noise={1.0}
+          />
+        </>
+      )}
     </>
   );
 });
