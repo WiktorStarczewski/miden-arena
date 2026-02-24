@@ -1,0 +1,3 @@
+[workspace]
+resolver = "2"
+members = ["crates/combat-engine", "contracts/counter-test", "contracts/combat-test", "contracts/combat-test-broken", "contracts/arena-account"]

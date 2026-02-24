@@ -49,6 +49,7 @@ interface AnimScript {
   oppChampionId: number;
   first: AnimAction;
   second: AnimAction;
+  secondActed: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -192,6 +193,7 @@ function buildAnimScript(
         ? extractIndicator(record.events, secondChamp.id, firstChamp.id, secondSide)
         : undefined,
     },
+    secondActed,
   };
 }
 
@@ -289,6 +291,24 @@ export default function BattleScreen() {
   const myActiveChampion = useMemo(() => {
     // During animation: show the correct champion with the right anim clip
     if (animSubPhase && animScript) {
+      // Check if champion was KO'd this turn → show death pose
+      // During settle: always show death if KO'd
+      // During second: show death if this champion was the second actor but didn't act (KO'd by first hit)
+      const myChampKO = battle.myChampions.find(
+        (c) => c.id === animScript.myChampionId,
+      )?.isKO;
+      if (myChampKO && animSubPhase === "settle") {
+        return { id: animScript.myChampionId, animation: "death" };
+      }
+      if (
+        myChampKO &&
+        animSubPhase === "second" &&
+        animScript.second.actorSide === "left" &&
+        !animScript.secondActed
+      ) {
+        return { id: animScript.myChampionId, animation: "death" };
+      }
+
       let anim = "idle";
       if (currentAction) {
         if (currentAction.actorSide === "left") {
@@ -311,13 +331,32 @@ export default function BattleScreen() {
         return { id: battle.selectedChampion, animation: "idle" };
       }
     }
+    // Show first survivor at idle, or first KO'd champion in death pose
     const survivor = battle.myChampions.find((c) => !c.isKO);
-    return survivor ? { id: survivor.id, animation: "idle" } : undefined;
+    if (survivor) return { id: survivor.id, animation: "idle" };
+    const dead = battle.myChampions.find((c) => c.isKO);
+    return dead ? { id: dead.id, animation: "death" } : undefined;
   }, [animSubPhase, animScript, currentAction, battle.selectedChampion, battle.myChampions]);
 
   const opponentActiveChampion = useMemo(() => {
     // During animation: show the correct champion with the right anim clip
     if (animSubPhase && animScript) {
+      // Check if champion was KO'd this turn → show death pose
+      const oppChampKO = battle.opponentChampions.find(
+        (c) => c.id === animScript.oppChampionId,
+      )?.isKO;
+      if (oppChampKO && animSubPhase === "settle") {
+        return { id: animScript.oppChampionId, animation: "death" };
+      }
+      if (
+        oppChampKO &&
+        animSubPhase === "second" &&
+        animScript.second.actorSide === "right" &&
+        !animScript.secondActed
+      ) {
+        return { id: animScript.oppChampionId, animation: "death" };
+      }
+
       let anim = "idle";
       if (currentAction) {
         if (currentAction.actorSide === "right") {
@@ -331,9 +370,11 @@ export default function BattleScreen() {
       return { id: animScript.oppChampionId, animation: anim };
     }
 
-    // Default: first surviving opponent champion
+    // Default: first surviving opponent champion, or first KO'd in death pose
     const survivor = battle.opponentChampions.find((c) => !c.isKO);
-    return survivor ? { id: survivor.id, animation: "idle" } : undefined;
+    if (survivor) return { id: survivor.id, animation: "idle" };
+    const dead = battle.opponentChampions.find((c) => c.isKO);
+    return dead ? { id: dead.id, animation: "death" } : undefined;
   }, [animSubPhase, animScript, currentAction, battle.opponentChampions]);
 
   // --- Attack effect (projectile from attacker → defender) ---

@@ -9,6 +9,8 @@ import {
   RedFormat,
   Color,
   SkinnedMesh,
+  LoopOnce,
+  LoopRepeat,
 } from "three";
 import { getChampion } from "../constants/champions";
 
@@ -124,8 +126,17 @@ const LoadedModel = React.memo(function LoadedModel({
 
   // Play the requested animation
   useEffect(() => {
+    const isDeath = animation === "death";
+
     const action = actions[animation];
     if (action) {
+      if (isDeath) {
+        action.clampWhenFinished = true;
+        action.setLoop(LoopOnce, 1);
+      } else {
+        action.clampWhenFinished = false;
+        action.setLoop(LoopRepeat, Infinity);
+      }
       action.reset().fadeIn(0.25).play();
       return () => {
         action.fadeOut(0.25);
@@ -139,6 +150,13 @@ const LoadedModel = React.memo(function LoadedModel({
     );
     if (matchKey && actions[matchKey]) {
       const fallbackAction = actions[matchKey]!;
+      if (isDeath) {
+        fallbackAction.clampWhenFinished = true;
+        fallbackAction.setLoop(LoopOnce, 1);
+      } else {
+        fallbackAction.clampWhenFinished = false;
+        fallbackAction.setLoop(LoopRepeat, Infinity);
+      }
       fallbackAction.reset().fadeIn(0.25).play();
       return () => {
         fallbackAction.fadeOut(0.25);
@@ -149,6 +167,13 @@ const LoadedModel = React.memo(function LoadedModel({
     const firstKey = Object.keys(actions)[0];
     if (firstKey && actions[firstKey]) {
       const firstAction = actions[firstKey]!;
+      if (isDeath) {
+        firstAction.clampWhenFinished = true;
+        firstAction.setLoop(LoopOnce, 1);
+      } else {
+        firstAction.clampWhenFinished = false;
+        firstAction.setLoop(LoopRepeat, Infinity);
+      }
       firstAction.reset().fadeIn(0.25).play();
       return () => {
         firstAction.fadeOut(0.25);
