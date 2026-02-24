@@ -262,6 +262,144 @@ fn push_event(events: &mut [TurnEvent; MAX_EVENTS], count: &mut u8, event: TurnE
     }
 }
 
+/// Miden-friendly variant of resolve_turn that mutates states in place.
+/// Avoids the large TurnResult struct return which triggers a compiler bug
+/// in the Miden WASM→MASM pipeline. Returns the number of events that occurred.
+///
+/// This is functionally identical to resolve_turn but doesn't track individual
+/// events — the on-chain account only needs the final state, not the event log.
+pub fn resolve_turn_mut(
+    state_a: &mut ChampionState,
+    state_b: &mut ChampionState,
+    action_a: &TurnAction,
+    action_b: &TurnAction,
+) -> u8 {
+    let champ_a = get_champion(state_a.id);
+    let champ_b = get_champion(state_b.id);
+
+    let mut event_count: u8 = 0;
+
+    // Speed priority
+    let speed_a = champ_a.speed + sum_buffs(state_a, StatType::Speed);
+    let speed_b = champ_b.speed + sum_buffs(state_b, StatType::Speed);
+
+    let a_goes_first =
+        speed_a > speed_b || (speed_a == speed_b && champ_a.id < champ_b.id);
+
+    if a_goes_first {
+        event_count += execute_action_mut(champ_a, state_a, action_a, champ_b, state_b);
+        if !state_b.is_ko {
+            event_count += execute_action_mut(champ_b, state_b, action_b, champ_a, state_a);
+        }
+    } else {
+        event_count += execute_action_mut(champ_b, state_b, action_b, champ_a, state_a);
+        if !state_a.is_ko {
+            event_count += execute_action_mut(champ_a, state_a, action_a, champ_b, state_b);
+        }
+    }
+
+    // Burn ticks
+    event_count += process_burn_tick_mut(state_a);
+    event_count += process_burn_tick_mut(state_b);
+
+    // Tick down buff durations
+    tick_buffs(state_a);
+    tick_buffs(state_b);
+
+    event_count
+}
+
+fn execute_action_mut(
+    actor_champ: &Champion,
+    actor_state: &mut ChampionState,
+    action: &TurnAction,
+    target_champ: &Champion,
+    target_state: &mut ChampionState,
+) -> u8 {
+    let ability = &actor_champ.abilities[action.ability_index as usize];
+    let mut events: u8 = 0;
+
+    match ability.ability_type {
+        AbilityType::Damage => {
+            let (damage, _) =
+                calculate_damage(actor_champ, target_champ, target_state, ability, actor_state);
+            target_state.current_hp = target_state.current_hp.saturating_sub(damage);
+            actor_state.total_damage_dealt += damage;
+            events += 1;
+            if target_state.current_hp == 0 {
+                target_state.is_ko = true;
+                events += 1;
+            }
+        }
+        AbilityType::DamageDot => {
+            let (damage, _) =
+                calculate_damage(actor_champ, target_champ, target_state, ability, actor_state);
+            target_state.current_hp = target_state.current_hp.saturating_sub(damage);
+            actor_state.total_damage_dealt += damage;
+            events += 1;
+            if target_state.current_hp == 0 {
+                target_state.is_ko = true;
+                events += 1;
+            }
+            if ability.applies_burn && ability.duration > 0 && !target_state.is_ko {
+                target_state.burn_turns = ability.duration;
+                events += 1;
+            }
+        }
+        AbilityType::Heal => {
+            let old_hp = actor_state.current_hp;
+            let new_hp = if old_hp + ability.heal_amount > actor_state.max_hp {
+                actor_state.max_hp
+            } else {
+                old_hp + ability.heal_amount
+            };
+            actor_state.current_hp = new_hp;
+            events += 1;
+        }
+        AbilityType::Buff => {
+            if ability.stat_value > 0 && ability.duration > 0 {
+                let slot = BuffSlot {
+                    stat: ability.stat,
+                    value: ability.stat_value,
+                    turns_remaining: ability.duration,
+                    is_debuff: false,
+                    active: true,
+                };
+                insert_buff(actor_state, slot);
+                events += 1;
+            }
+        }
+        AbilityType::Debuff => {
+            if ability.stat_value > 0 && ability.duration > 0 {
+                let slot = BuffSlot {
+                    stat: ability.stat,
+                    value: ability.stat_value,
+                    turns_remaining: ability.duration,
+                    is_debuff: true,
+                    active: true,
+                };
+                insert_buff(target_state, slot);
+                events += 1;
+            }
+        }
+    }
+    events
+}
+
+fn process_burn_tick_mut(state: &mut ChampionState) -> u8 {
+    if state.burn_turns > 0 && !state.is_ko {
+        let burn_damage = calculate_burn_damage(state);
+        state.current_hp = state.current_hp.saturating_sub(burn_damage);
+        state.burn_turns -= 1;
+        if state.current_hp == 0 {
+            state.is_ko = true;
+            return 2; // burn tick + KO
+        }
+        return 1; // burn tick only
+    }
+    0
+}
+
 /// Initialize champion combat state from champion definition.
 pub fn init_champion_state(champion_id: u8) -> ChampionState {
     let champ = get_champion(champion_id);
@@ -775,4 +913,5 @@ mod tests {
         assert!(burn_tick_total > 0, "burn should have dealt tick damage");
         assert!(rounds > 1, "should take multiple rounds");
     }
+
 }

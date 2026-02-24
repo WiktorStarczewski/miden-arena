@@ -1,0 +1,15 @@
+[package]
+name = "combat_test"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+# Build this crate as a self-contained, C-style dynamic library
+# This is required to emit the proper Wasm module type
+crate-type = ["cdylib"]
+
+[dependencies]
+miden = { version = "0.10" }
+combat-engine = { path = "../../crates/combat-engine" }
+
+
