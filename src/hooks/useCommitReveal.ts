@@ -1,148 +1,53 @@
 /**
- * useCommitReveal - Core commit-reveal cryptographic protocol for combat moves.
+ * useCommitReveal — Arena-based commit-reveal for combat moves.
  *
  * Each combat turn follows a two-phase protocol:
  *
  *  **Commit phase:**
  *   1. Player picks a move (encoded as 1-20).
- *   2. A random nonce is generated and SHA-256(move || nonce) is computed.
- *   3. The first 32 bits of the hash are split into 2 × 16-bit values.
- *   4. One note is sent with amount=1 and a NoteAttachment carrying
- *      [MSG_TYPE_COMMIT, hashPart1, hashPart2].
+ *   2. RPO256 hash of (move, nonce_p1, nonce_p2) is computed.
+ *   3. A commit note is sent to the arena via submit_move_note (phase=0).
+ *   4. The 4-Felt RPO hash is passed as the consume arg Word.
  *
  *  **Reveal phase:**
- *   1. One note is sent with amount=1 and a NoteAttachment carrying
- *      [MSG_TYPE_REVEAL, move, noncePart1, noncePart2].
- *   2. The opponent reconstructs the nonce, recomputes the hash, and checks
- *      that it matches the committed values.
+ *   1. A reveal note is sent to the arena via submit_move_note (phase=1).
+ *   2. The arg Word carries [move, nonce_p1, nonce_p2, 0].
+ *   3. The arena contract verifies the RPO hash matches the commitment.
+ *   4. If both players have revealed, the arena auto-resolves the turn.
  *
- * Data is carried in NoteAttachment (not token amounts), reducing wallet
- * drain to ~2n per turn instead of ~265K.
+ * Opponent detection is via arena state polling (not P2P notes).
  */
 
-import { useState, useCallback, useEffect, useRef } from "react";
-import { useTransaction, useSyncState } from "@miden-sdk/react";
-import {
-  AccountId,
-  FungibleAsset,
-  Note,
-  NoteAssets,
-  NoteAttachment,
-  NoteAttachmentKind,
-  NoteAttachmentScheme,
-  NoteType,
-  OutputNote,
-  OutputNoteArray,
-  TransactionRequestBuilder,
-  Word,
-} from "@miden-sdk/miden-sdk";
-import type { InputNoteRecord } from "@miden-sdk/miden-sdk";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import { useMiden } from "@miden-sdk/react";
+import { Word } from "@miden-sdk/miden-sdk";
 import { useGameStore } from "../store/gameStore";
-import { useNoteDecoder } from "./useNoteDecoder";
-import {
-  createCommitment,
-  createReveal,
-  verifyReveal,
-} from "../engine/commitment";
-import { MIDEN_FAUCET_ID, PROTOCOL_NOTE_AMOUNT } from "../constants/miden";
-import { MSG_TYPE_COMMIT, MSG_TYPE_REVEAL } from "../constants/protocol";
-import type { CommitData, RevealData } from "../types";
+import { buildCommitNote, buildRevealNote, submitArenaNote } from "../utils/arenaNote";
+import { createCommitment, createReveal } from "../engine/commitment";
+import { ARENA_ACCOUNT_ID } from "../constants/miden";
+import type { CommitData } from "../types";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 export interface UseCommitRevealReturn {
-  /** Create a cryptographic commitment for a move and send hash parts to the opponent. */
+  /** Create a cryptographic commitment for a move and send to the arena. */
   commit: (move: number) => Promise<void>;
-  /** Reveal our previously committed move by sending the move + nonce parts. */
+  /** Reveal our previously committed move to the arena. */
   reveal: () => Promise<void>;
   /** Whether we have sent our commitment this turn. */
   isCommitted: boolean;
   /** Whether we have sent our reveal this turn. */
   isRevealed: boolean;
-  /** Whether the opponent has sent their commit note this turn. */
+  /** Whether the opponent has sent their commit to the arena. */
   opponentCommitted: boolean;
-  /** Whether the opponent has sent their reveal note this turn. */
+  /** Whether the opponent has sent their reveal to the arena. */
   opponentRevealed: boolean;
-  /** The decoded opponent move (set after reveal verification). `null` until verified. */
+  /** The decoded opponent move (read from arena reveal slot). `null` until revealed. */
   opponentMove: number | null;
   /** Error message if any step fails. */
   error: string | null;
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/** Parse an AccountId from a bech32/hex string. */
-function parseId(id: string): AccountId {
-  try {
-    return AccountId.fromBech32(id);
-  } catch {
-    return AccountId.fromHex(id);
-  }
-}
-
-/** Build and send a single P2ID note with a Word attachment (4 felts). */
-async function sendAttachmentNote(
-  execute: ReturnType<typeof useTransaction>["execute"],
-  senderId: string,
-  targetId: string,
-  feltValues: bigint[],
-): Promise<void> {
-  const sender = parseId(senderId);
-  const target = parseId(targetId);
-  const faucet = parseId(MIDEN_FAUCET_ID);
-
-  // Pad to exactly 4 elements for a Word attachment.
-  // Word attachments don't require advice map entries (unlike Array),
-  // which avoids a bug in miden-standards 0.13.x.
-  const padded = [...feltValues];
-  while (padded.length < 4) padded.push(0n);
-  const word = new Word(BigUint64Array.from(padded));
-  const scheme = NoteAttachmentScheme.none();
-  const attachment = NoteAttachment.newWord(scheme, word);
-
-  const note = Note.createP2IDNote(
-    sender,
-    target,
-    new NoteAssets([new FungibleAsset(faucet, PROTOCOL_NOTE_AMOUNT)]),
-    NoteType.Public,
-    attachment,
-  );
-
-  const txRequest = new TransactionRequestBuilder()
-    .withOwnOutputNotes(new OutputNoteArray([OutputNote.full(note)]))
-    .build();
-
-  await execute({ accountId: senderId, request: txRequest });
-}
-
-/**
- * Try to read the attachment from an InputNoteRecord.
- * Returns felt values as bigint[] if the note has a Word or Array attachment, or null.
- */
-function readAttachment(record: InputNoteRecord): bigint[] | null {
-  const meta = record.metadata();
-  if (!meta) return null;
-  const att = meta.attachment();
-  if (att.attachmentKind() === NoteAttachmentKind.None) return null;
-
-  // Word attachment (our current format)
-  const word = att.asWord();
-  if (word) {
-    const u64s = word.toU64s();
-    return [u64s[0], u64s[1], u64s[2], u64s[3]];
-  }
-
-  // Array attachment (legacy fallback)
-  const arr = att.asArray();
-  if (arr) {
-    return Array.from({ length: arr.length() }, (_, i) => arr.get(i).asInt());
-  }
-
-  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -151,17 +56,19 @@ function readAttachment(record: InputNoteRecord): bigint[] | null {
 
 export function useCommitReveal(): UseCommitRevealReturn {
   const sessionWalletId = useGameStore((s) => s.setup.sessionWalletId);
-  const opponentId = useGameStore((s) => s.match.opponentId);
   const round = useGameStore((s) => s.battle.round);
-  const battleStaleNoteIds = useGameStore((s) => s.battle.staleNoteIds);
   const setMyCommit = useGameStore((s) => s.setMyCommit);
-  const setOpponentCommitNotes = useGameStore((s) => s.setOpponentCommitNotes);
   const setMyReveal = useGameStore((s) => s.setMyReveal);
-  const setOpponentReveal = useGameStore((s) => s.setOpponentReveal);
 
-  const { execute } = useTransaction();
-  const { sync } = useSyncState();
-  const { allOpponentNotes, rawOpponentNotes } = useNoteDecoder(opponentId);
+  const { client, prover } = useMiden();
+
+  // Read arena state directly from Zustand (avoids creating a duplicate polling loop).
+  // The polling loop is owned by useArenaState in the parent screen component.
+  const moveACommit = useGameStore((s) => s.arena.moveACommit);
+  const moveBCommit = useGameStore((s) => s.arena.moveBCommit);
+  const moveAReveal = useGameStore((s) => s.arena.moveAReveal);
+  const moveBReveal = useGameStore((s) => s.arena.moveBReveal);
+  const playerA = useGameStore((s) => s.arena.playerA);
 
   const [isCommitted, setIsCommitted] = useState(false);
   const [isRevealed, setIsRevealed] = useState(false);
@@ -172,12 +79,6 @@ export function useCommitReveal(): UseCommitRevealReturn {
 
   // Store the current commitment locally for the reveal step
   const commitDataRef = useRef<CommitData | null>(null);
-
-  // ID-based note tracking: notes in this set are skipped.
-  // Initialised from battle staleNoteIds (all notes before battle started).
-  // Notes consumed as commits or reveals are added here so they're not
-  // reprocessed in later rounds.
-  const handledNoteIds = useRef(new Set(battleStaleNoteIds));
 
   // Track which round we last reset for
   const lastResetRound = useRef<number>(0);
@@ -195,15 +96,10 @@ export function useCommitReveal(): UseCommitRevealReturn {
     setOpponentMove(null);
     setError(null);
     commitDataRef.current = null;
-    // Snapshot ALL current opponent notes as handled so that notes from
-    // previous rounds cannot be misclassified in the new round.
-    for (const note of allOpponentNotes) {
-      handledNoteIds.current.add(note.noteId);
-    }
-  }, [round, allOpponentNotes]);
+  }, [round]);
 
   // -----------------------------------------------------------------------
-  // commit(move) - Generate commitment and send 1 attachment note
+  // commit(move) — Generate RPO commitment and send to arena
   // -----------------------------------------------------------------------
   const commit = useCallback(
     async (move: number) => {
@@ -217,40 +113,39 @@ export function useCommitReveal(): UseCommitRevealReturn {
         return;
       }
 
-      if (!opponentId) {
-        setError("No opponent connected.");
+      if (!client || !prover) {
+        setError("Miden client not ready.");
         return;
       }
 
       setError(null);
 
       try {
-        const commitment = await createCommitment(move);
-        const commitData: CommitData = {
-          move: commitment.move,
-          nonce: commitment.nonce,
-          part1: commitment.part1,
-          part2: commitment.part2,
-        };
+        // Generate RPO256 commitment (sync)
+        const commitment = createCommitment(move);
 
-        // Sync wallet state before building tx to avoid stale commitment
-        await sync();
+        // Build commit note (phase=0)
+        const note = await buildCommitNote(sessionWalletId, ARENA_ACCOUNT_ID);
 
-        await sendAttachmentNote(
-          execute,
+        // Args: the 4-Felt RPO hash
+        const commitArgs = new Word(BigUint64Array.from(commitment.commitWord));
+
+        await submitArenaNote({
+          client,
+          prover,
           sessionWalletId,
-          opponentId,
-          [MSG_TYPE_COMMIT, commitment.part1, commitment.part2],
-        );
+          arenaAccountId: ARENA_ACCOUNT_ID,
+          note,
+          consumeArgs: commitArgs,
+        });
 
-        commitDataRef.current = commitData;
-        setMyCommit(commitData);
+        commitDataRef.current = commitment;
+        setMyCommit(commitment);
         setIsCommitted(true);
 
-        console.log("[useCommitReveal] commit sent", {
+        console.log("[useCommitReveal] commit sent to arena", {
           round,
-          part1: commitment.part1.toString(),
-          part2: commitment.part2.toString(),
+          commitWord: commitment.commitWord.map(String),
         });
       } catch (err) {
         const message =
@@ -259,11 +154,11 @@ export function useCommitReveal(): UseCommitRevealReturn {
         setError(message);
       }
     },
-    [isCommitted, sessionWalletId, opponentId, round, execute, sync, setMyCommit],
+    [isCommitted, sessionWalletId, client, prover, round, setMyCommit],
   );
 
   // -----------------------------------------------------------------------
-  // reveal() - Send 1 attachment note: move + nonce parts
+  // reveal() — Send move + nonces to arena for verification
   // -----------------------------------------------------------------------
   const reveal = useCallback(async () => {
     if (isRevealed) {
@@ -281,35 +176,42 @@ export function useCommitReveal(): UseCommitRevealReturn {
       return;
     }
 
-    if (!opponentId) {
-      setError("No opponent connected.");
+    if (!client || !prover) {
+      setError("Miden client not ready.");
       return;
     }
 
     setError(null);
 
     try {
-      const { move, nonce } = commitDataRef.current;
-      const revealData = createReveal(move, nonce);
+      const revealData = createReveal(commitDataRef.current);
 
-      await sync();
+      // Build reveal note (phase=1)
+      const note = await buildRevealNote(sessionWalletId, ARENA_ACCOUNT_ID);
 
-      await sendAttachmentNote(
-        execute,
-        sessionWalletId,
-        opponentId,
-        [MSG_TYPE_REVEAL, BigInt(revealData.move), revealData.noncePart1, revealData.noncePart2],
+      // Args: [encoded_move, nonce_p1, nonce_p2, 0]
+      const revealArgs = new Word(
+        BigUint64Array.from([
+          BigInt(revealData.move),
+          revealData.noncePart1,
+          revealData.noncePart2,
+          0n,
+        ]),
       );
 
-      const revealStoreData: RevealData = {
-        move: revealData.move,
-        noncePart1: revealData.noncePart1,
-        noncePart2: revealData.noncePart2,
-      };
-      setMyReveal(revealStoreData);
+      await submitArenaNote({
+        client,
+        prover,
+        sessionWalletId,
+        arenaAccountId: ARENA_ACCOUNT_ID,
+        note,
+        consumeArgs: revealArgs,
+      });
+
+      setMyReveal(revealData);
       setIsRevealed(true);
 
-      console.log("[useCommitReveal] reveal sent", {
+      console.log("[useCommitReveal] reveal sent to arena", {
         round,
         move: revealData.move,
       });
@@ -319,123 +221,55 @@ export function useCommitReveal(): UseCommitRevealReturn {
       console.error("[useCommitReveal] reveal failed", err);
       setError(message);
     }
-  }, [isRevealed, sessionWalletId, opponentId, round, execute, sync, setMyReveal]);
+  }, [isRevealed, sessionWalletId, client, prover, round, setMyReveal]);
 
   // -----------------------------------------------------------------------
-  // Detect opponent commit note: 1 new note with MSG_TYPE_COMMIT attachment
+  // Determine which player we are (stable across renders)
+  // -----------------------------------------------------------------------
+  const amPlayerA = useMemo(() => {
+    if (!sessionWalletId || !playerA) return false;
+    // Simple comparison: check if playerA was set by our session wallet.
+    // This is set when the arena's player_a slot matches our account.
+    // The full AccountId comparison is done by useArenaState helpers.
+    // Here we use a simplified check against the Zustand store directly.
+    return useGameStore.getState().match.role === "host";
+  }, [sessionWalletId, playerA]);
+
+  // Derive opponent's commit/reveal slots based on our role
+  const opponentCommitSlot = amPlayerA ? moveBCommit : moveACommit;
+  const opponentRevealSlot = amPlayerA ? moveBReveal : moveAReveal;
+
+  // -----------------------------------------------------------------------
+  // Detect opponent commit via arena state polling
   // -----------------------------------------------------------------------
   useEffect(() => {
     if (opponentCommitted) return;
 
-    for (const record of rawOpponentNotes) {
-      const noteId = record.id().toString();
-      if (handledNoteIds.current.has(noteId)) continue;
-
-      const felts = readAttachment(record);
-      if (!felts || felts.length < 3) continue;
-
-      const msgType = felts[0];
-      if (msgType !== MSG_TYPE_COMMIT) continue;
-
-      const rawPart1 = felts[1];
-      const rawPart2 = felts[2];
-
-      handledNoteIds.current.add(noteId);
-
-      console.log("[useCommitReveal] opponent commit detected", {
-        round,
-        rawPart1: rawPart1.toString(),
-        rawPart2: rawPart2.toString(),
-      });
-
-      setOpponentCommitNotes([
-        { noteId, amount: rawPart1 },
-        { noteId, amount: rawPart2 },
-      ]);
+    const hasCommit = opponentCommitSlot.some((v) => v !== 0n);
+    if (hasCommit) {
+      console.log("[useCommitReveal] opponent commit detected via arena", { round });
       setOpponentCommitted(true);
-      break;
     }
-  }, [opponentCommitted, rawOpponentNotes, round, setOpponentCommitNotes]);
+  }, [opponentCommitted, opponentCommitSlot, round]);
 
   // -----------------------------------------------------------------------
-  // Detect opponent reveal note: 1 new note with MSG_TYPE_REVEAL attachment
+  // Detect opponent reveal via arena state polling
   // -----------------------------------------------------------------------
   useEffect(() => {
     if (!opponentCommitted || opponentRevealed) return;
 
-    for (const record of rawOpponentNotes) {
-      const noteId = record.id().toString();
-      if (handledNoteIds.current.has(noteId)) continue;
-
-      const felts = readAttachment(record);
-      if (!felts || felts.length < 4) continue;
-
-      const msgType = felts[0];
-      if (msgType !== MSG_TYPE_REVEAL) continue;
-
-      const oppMove = Number(felts[1]);
-      const noncePart1 = felts[2];
-      const noncePart2 = felts[3];
-
-      handledNoteIds.current.add(noteId);
-
-      // Read committed values from store (already raw)
-      const storeState = useGameStore.getState();
-      const commitNoteRefs = storeState.battle.opponentCommitNotes;
-      if (commitNoteRefs.length < 2) break;
-
-      const commitPart1 = commitNoteRefs[0].amount;
-      const commitPart2 = commitNoteRefs[1].amount;
-
-      console.log("[useCommitReveal] opponent reveal detected", {
+    const hasReveal = opponentRevealSlot.some((v) => v !== 0n);
+    if (hasReveal) {
+      // Read the opponent's move from the first element of their reveal slot
+      const decodedMove = Number(opponentRevealSlot[0]);
+      console.log("[useCommitReveal] opponent reveal detected via arena", {
         round,
-        move: oppMove,
-        noncePart1: noncePart1.toString(),
-        noncePart2: noncePart2.toString(),
-        commitPart1: commitPart1.toString(),
-        commitPart2: commitPart2.toString(),
+        move: decodedMove,
       });
-
-      // Verify asynchronously
-      (async () => {
-        try {
-          const valid = await verifyReveal(
-            oppMove,
-            noncePart1,
-            noncePart2,
-            commitPart1,
-            commitPart2,
-          );
-
-          if (valid) {
-            console.log("[useCommitReveal] opponent reveal verified", { round, move: oppMove });
-            setOpponentMove(oppMove);
-            setOpponentReveal({
-              move: oppMove,
-              noncePart1,
-              noncePart2,
-            });
-            setOpponentRevealed(true);
-          } else {
-            console.error("[useCommitReveal] opponent reveal verification FAILED", {
-              round,
-              oppMove,
-              noncePart1: noncePart1.toString(),
-              noncePart2: noncePart2.toString(),
-              commitPart1: commitPart1.toString(),
-              commitPart2: commitPart2.toString(),
-            });
-            setError("Opponent reveal verification failed - possible cheating detected.");
-          }
-        } catch (err) {
-          console.error("[useCommitReveal] reveal verification threw", err);
-          setError("Reveal verification error.");
-        }
-      })();
-
-      break;
+      setOpponentMove(decodedMove);
+      setOpponentRevealed(true);
     }
-  }, [opponentCommitted, opponentRevealed, rawOpponentNotes, round, setOpponentReveal]);
+  }, [opponentCommitted, opponentRevealed, opponentRevealSlot, round]);
 
   return {
     commit,

@@ -15,12 +15,6 @@ export const DRAFT_PICK_MAX = 10n;
 export const MOVE_MIN = 1n;
 export const MOVE_MAX = 20n;
 
-/** Message type tag for commit notes (attachment-based protocol). */
-export const MSG_TYPE_COMMIT = 1n;
-
-/** Message type tag for reveal notes (attachment-based protocol). */
-export const MSG_TYPE_REVEAL = 2n;
-
 /** Snake draft order: index = pick number (0-5), value = "A" or "B" */
 export const DRAFT_ORDER: ("A" | "B")[] = ["A", "B", "B", "A", "A", "B"];
 

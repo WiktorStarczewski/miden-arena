@@ -171,3 +171,57 @@
 - `active_note::get_assets()` → `Vec<Asset>` (note assets)
 - `active_note::get_inputs()` → `Vec<Felt>` (note inputs)
 - All available via `use miden::*` — SDK functions work in both `#[note_script]` and `generate!()` patterns
+
+## 2026-02-24: Deployment Automation (Phase 4)
+
+### Deploy Script Pattern
+- Build order matters: arena-account first (generates WIT), then note scripts
+- Copy generated WIT to stable `wit/` dir before building note scripts
+- `miden-client new-account` with `--packages`, `--deploy`, `--storage-mode public`
+- Extract account ID from CLI output via `grep -oE '0x[0-9a-fA-F]+'`
+- Write centralized `contracts.ts` with account ID and note script paths
+
+### Frontend Contract Integration
+- Note script .masp files served as static assets from `public/contracts/`
+- Single `src/constants/contracts.ts` file re-exported via `src/constants/miden.ts`
+- Placeholder values allow frontend to compile before first deployment
+- Deploy script overwrites the file with real values after deployment
+
+## 2026-02-24: Plan Review — Frontend Arena Integration
+
+### Always Verify SDK API Signatures Before Writing Integration Code
+- `AccountStorage.getItem()` may accept string names or numeric indices — depends on `#[component]` macro
+- `NoteStorage` constructor may take `FeltArray` or a different argument type
+- `importAccountById` behavior for public accounts (does it pull full component code?) needs testing
+- **Lesson:** Deploy + test API calls in browser console BEFORE writing hooks that depend on them
+
+### Arena Storage Initialization is Not Automatic
+- `faucet_id` (slot 21) and `p2id_script_hash` (slot 22) are read by `send_payout` but never written by any procedure
+- `scripts/deploy.sh` creates the account but doesn't initialize these slots
+- Payouts will silently produce invalid notes with zero faucet/zero script hash
+- **Lesson:** Always trace data flow — if a procedure reads a storage slot, verify something writes it
+
+### Two-Tx Arena Flow Needs Nonce Conflict Handling
+- Both players submit consume txs against the same arena account (single nonce)
+- One tx will fail with a nonce conflict in concurrent submission scenarios
+- **Lesson:** Any shared-account pattern needs retry logic with re-sync + re-query
+
+### Contract Procedure Ordering Constraints
+- `set_team` asserts `game_state == 2` (both joined) — cannot be called before both players stake
+- Frontend must gate team submission on arena state poll, not just local state
+- **Lesson:** Always read the contract's assert conditions and translate them into frontend guards
+
+### Game State Machine Needs Explicit Screen State
+- Adding a phase between draft and battle requires a new `Screen` variant
+- Can't overload `preBattleLoading` — it's a different flow now (stake → wait → team → wait → battle)
+- **Lesson:** If the game flow changes, update the state machine enum first
+
+### Use `submitNewTransactionWithProver` Consistently
+- The codebase uses `submitNewTransactionWithProver(id, req, prover)` everywhere
+- Plan originally referenced `submitNewTransaction(id, req)` for arena txs — would fail
+- **Lesson:** Grep for actual usage patterns in existing code, don't mix API variants
+
+### `randomFelt()` Shared Between Modules
+- Both `arenaNote.ts` (serial numbers) and `commitment.ts` (nonces) need random Felts
+- Duplicating the function invites divergence (one shifts >> 2n, the other forgets)
+- **Lesson:** Extract shared crypto primitives to a single module from the start

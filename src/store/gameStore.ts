@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type { ChampionState, CommitData, RevealData, TurnRecord } from "../types";
 
-export type Screen = "loading" | "title" | "setup" | "lobby" | "draft" | "preBattleLoading" | "battle" | "gameOver";
+export type Screen = "loading" | "title" | "setup" | "lobby" | "draft" | "arenaSetup" | "preBattleLoading" | "battle" | "gameOver";
 export type SetupStep = "idle" | "connecting" | "creatingWallet" | "funding" | "consuming" | "done";
 export type BattlePhase = "choosing" | "committing" | "waitingCommit" | "revealing" | "waitingReveal" | "resolving" | "animating";
 
@@ -39,9 +39,7 @@ interface BattleState {
   selectedChampion: number | null;
   selectedAbility: number | null;
   myCommit: CommitData | null;
-  opponentCommitNotes: NoteRef[];
   myReveal: RevealData | null;
-  opponentReveal: RevealData | null;
   turnLog: TurnRecord[];
   /** Note IDs from the opponent that existed before battle started. */
   staleNoteIds: string[];
@@ -53,6 +51,23 @@ interface ResultState {
   mvp: number | null;
 }
 
+export interface ArenaState {
+  gameState: number;            // 0-4
+  round: number;
+  winner: number;               // 0-3
+  teamsSubmitted: number;       // bitfield
+  playerA: { prefix: bigint; suffix: bigint } | null;
+  playerB: { prefix: bigint; suffix: bigint } | null;
+  moveACommit: bigint[];        // 4 Felts (all-zero = empty)
+  moveBCommit: bigint[];
+  moveAReveal: bigint[];
+  moveBReveal: bigint[];
+  playerAChamps: bigint[][];    // 3 × [u64; 4] packed champion Words
+  playerBChamps: bigint[][];    // 3 × [u64; 4] packed champion Words
+  loading: boolean;
+  error: string | null;
+}
+
 export interface GameStore {
   screen: Screen;
   setup: SetupState;
@@ -60,6 +75,7 @@ export interface GameStore {
   draft: DraftState;
   battle: BattleState;
   result: ResultState;
+  arena: ArenaState;
 
   // Navigation
   setScreen: (screen: Screen) => void;
@@ -84,15 +100,16 @@ export interface GameStore {
   selectAbility: (index: number | null) => void;
   setBattlePhase: (phase: BattlePhase) => void;
   setMyCommit: (commit: CommitData | null) => void;
-  setOpponentCommitNotes: (notes: NoteRef[]) => void;
   setMyReveal: (reveal: RevealData | null) => void;
-  setOpponentReveal: (reveal: RevealData | null) => void;
   updateChampions: (my: ChampionState[], opponent: ChampionState[]) => void;
   addTurnRecord: (record: TurnRecord) => void;
   nextRound: () => void;
 
   // Result actions
   setResult: (winner: "me" | "opponent" | "draw", mvp: number | null) => void;
+
+  // Arena actions
+  setArena: (arena: Partial<ArenaState>) => void;
 
   // Reset
   resetGame: () => void;
@@ -126,11 +143,26 @@ const initialBattle: BattleState = {
   selectedChampion: null,
   selectedAbility: null,
   myCommit: null,
-  opponentCommitNotes: [],
   myReveal: null,
-  opponentReveal: null,
   turnLog: [],
   staleNoteIds: [],
+};
+
+const initialArena: ArenaState = {
+  gameState: 0,
+  round: 0,
+  winner: 0,
+  teamsSubmitted: 0,
+  playerA: null,
+  playerB: null,
+  moveACommit: [0n, 0n, 0n, 0n],
+  moveBCommit: [0n, 0n, 0n, 0n],
+  moveAReveal: [0n, 0n, 0n, 0n],
+  moveBReveal: [0n, 0n, 0n, 0n],
+  playerAChamps: [[0n, 0n, 0n, 0n], [0n, 0n, 0n, 0n], [0n, 0n, 0n, 0n]],
+  playerBChamps: [[0n, 0n, 0n, 0n], [0n, 0n, 0n, 0n], [0n, 0n, 0n, 0n]],
+  loading: false,
+  error: null,
 };
 
 const initialResult: ResultState = {
@@ -146,6 +178,7 @@ export const useGameStore = create<GameStore>((set) => ({
   draft: { ...initialDraft },
   battle: { ...initialBattle },
   result: { ...initialResult },
+  arena: { ...initialArena },
 
   setScreen: (screen) => set({ screen }),
 
@@ -236,14 +269,8 @@ export const useGameStore = create<GameStore>((set) => ({
   setMyCommit: (commit) =>
     set((state) => ({ battle: { ...state.battle, myCommit: commit } })),
 
-  setOpponentCommitNotes: (notes) =>
-    set((state) => ({ battle: { ...state.battle, opponentCommitNotes: notes } })),
-
   setMyReveal: (reveal) =>
     set((state) => ({ battle: { ...state.battle, myReveal: reveal } })),
-
-  setOpponentReveal: (reveal) =>
-    set((state) => ({ battle: { ...state.battle, opponentReveal: reveal } })),
 
   updateChampions: (my, opponent) =>
     set((state) => ({
@@ -264,9 +291,7 @@ export const useGameStore = create<GameStore>((set) => ({
         selectedChampion: null,
         selectedAbility: null,
         myCommit: null,
-        opponentCommitNotes: [],
         myReveal: null,
-        opponentReveal: null,
       },
     })),
 
@@ -280,6 +305,9 @@ export const useGameStore = create<GameStore>((set) => ({
       },
     })),
 
+  setArena: (partial) =>
+    set((state) => ({ arena: { ...state.arena, ...partial } })),
+
   resetGame: () =>
     set({
       screen: "title",
@@ -287,6 +315,7 @@ export const useGameStore = create<GameStore>((set) => ({
       draft: { ...initialDraft },
       battle: { ...initialBattle },
       result: { ...initialResult },
+      arena: { ...initialArena },
     }),
 }));
 

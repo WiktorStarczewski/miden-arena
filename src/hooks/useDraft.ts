@@ -239,7 +239,7 @@ export function useDraft(): UseDraftReturn {
 
     clearGameState();
     initBattle(battleStaleNoteIds);
-    setScreen("preBattleLoading");
+    setScreen("arenaSetup");
   }, [done, myTeam.length, opponentTeam.length, allOpponentNotes, initBattle, setScreen]);
 
   return {
