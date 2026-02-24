@@ -31,19 +31,19 @@ import {
   TransactionRequestBuilder,
   Word,
 } from "@miden-sdk/miden-sdk";
-import type { WebClient } from "@miden-sdk/miden-sdk";
+import type { WasmWebClient } from "@miden-sdk/miden-sdk";
 import { NOTE_SCRIPTS } from "../constants/contracts";
-import { ARENA_ACCOUNT_ID, MIDEN_FAUCET_ID, STAKE_AMOUNT, PROTOCOL_NOTE_AMOUNT } from "../constants/miden";
+import { MIDEN_FAUCET_ID, STAKE_AMOUNT, PROTOCOL_NOTE_AMOUNT } from "../constants/miden";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 /** Prover interface matching what useMiden() exposes. */
-type Prover = Parameters<WebClient["submitNewTransactionWithProver"]>[2];
+type Prover = Parameters<WasmWebClient["submitNewTransactionWithProver"]>[2];
 
 export interface SubmitArenaNoteParams {
-  client: WebClient;
+  client: WasmWebClient;
   prover: Prover;
   sessionWalletId: string;
   arenaAccountId: string;
@@ -230,22 +230,19 @@ export async function submitArenaNote(
 
   // --- Step 1: Create the note from session wallet ---
   const sessionId = parseId(sessionWalletId);
+
+  // Capture the note ID before submission (Note has .id() available immediately)
+  const noteId = note.id().toString();
+
   const createTxRequest = new TransactionRequestBuilder()
     .withOwnOutputNotes(new OutputNoteArray([OutputNote.full(note)]))
     .build();
 
-  const createResult = await client.submitNewTransactionWithProver(
+  await client.submitNewTransactionWithProver(
     sessionId,
     createTxRequest,
     prover,
   );
-
-  // Extract created note ID
-  const createdNotes = createResult.createdNotes().notes();
-  if (createdNotes.length === 0) {
-    throw new Error("[submitArenaNote] No notes created in session wallet tx");
-  }
-  const noteId = createdNotes[0].id().toString();
 
   console.log("[submitArenaNote] Note created on-chain", { noteId });
 

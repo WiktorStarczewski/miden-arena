@@ -95,9 +95,9 @@ export function useArenaState(pollIntervalMs?: number): UseArenaStateReturn {
             const u64s = w.toU64s();
             return [u64s[0], u64s[1], u64s[2], u64s[3]];
           }
-          // Single Felt value — wrap in a Word
-          if (w && typeof w.asInt === "function") {
-            return [w.asInt(), 0n, 0n, 0n];
+          // Single Felt value — extract via toFelts()[0]
+          if (w && typeof w.toFelts === "function") {
+            return [w.toFelts()[0].asInt(), 0n, 0n, 0n];
           }
           return [0n, 0n, 0n, 0n];
         } catch {
@@ -158,8 +158,7 @@ export function useArenaState(pollIntervalMs?: number): UseArenaStateReturn {
       if (!player) return false;
       try {
         const id = parseId(myAccountId);
-        const idWord = id.toWord().toU64s();
-        return idWord[0] === player.prefix && idWord[1] === player.suffix;
+        return id.prefix().asInt() === player.prefix && id.suffix().asInt() === player.suffix;
       } catch {
         return false;
       }
