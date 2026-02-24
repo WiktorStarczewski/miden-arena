@@ -1,6 +1,6 @@
-# Miden Compiler & Arena Account Component Prototype
+# Miden Compiler & Arena Account Component
 
-## Completed Steps
+## Phase 1 — Completed
 
 - [x] Install Miden compiler toolchain (cargo-miden v0.7.1)
 - [x] Verify compatibility (compiler uses miden-core 0.20, matches local miden-base)
@@ -13,46 +13,50 @@
 - [x] Verify determinism: Miden VM output matches native Rust output exactly
 - [x] Identify compiler bug: large struct returns broken, workaround = inline logic
 
+## Phase 2 — Arena Account Component — Completed
+
+- [x] Add `pack.rs` module to combat-engine (ChampionState ↔ [u64; 4] packing)
+- [x] Create `contracts/arena-account/` crate with 21-slot storage layout
+- [x] Implement `join` procedure (first/second player joins, stake validation)
+- [x] Implement `set_team` procedure (team validation, overlap check, champion init)
+- [x] Implement `submit_commit` procedure (hash commitment storage)
+- [x] Implement `submit_reveal` procedure (move validation, triggers resolution)
+- [x] Implement `resolve_current_turn` with fully inlined combat resolution
+- [x] Implement `claim_timeout` procedure (forfeit/refund logic)
+- [x] Build produces .masp (381KB)
+- [x] All 40 combat-engine tests pass (33 existing + 7 new packing tests)
+
+## Phase 2 — Deferred Items
+
+- [ ] SHA-256 hash verification in `submit_reveal` (requires MASM binding research)
+- [ ] P2ID note creation in `claim_timeout` and `resolve_current_turn` payouts
+- [ ] Block height access for timeout logic (`tx::block_number()` or equivalent)
+- [ ] Note scripts: `submit-move-note`, `process-team-note`, `process-stake-note`
+- [ ] Consider RPO hash instead of SHA-256 (~1 cycle vs ~8500)
+
 ## Key Findings
 
 ### Toolchain
 - **Compiler:** `cargo-miden v0.7.1` from `0xMiden/compiler` repo
-- **Nightly:** `nightly-2025-12-10` (template's default, not `nightly-2025-07-20` from our plan)
-- **Target:** `wasm32-wasip2` (not `wasip1` as assumed)
-- **SDK crate:** `miden = { version = "0.10" }` (not `miden-sdk`)
+- **Nightly:** `nightly-2025-12-10`
+- **Target:** `wasm32-wasip2`
+- **SDK crate:** `miden = { version = "0.10" }`
 
 ### Real API (vs RustEngine.md pseudocode)
 - `#[component]` on struct + impl (not `#[account_component]`)
 - `Value` type for single storage slots (with `ValueAccess` trait)
-- `StorageMap` type for keyed storage (with `StorageMapAccess` trait)
-- `Felt` for field elements, `Word` for 4-Felt tuples
-- `#[storage(description = "...")]` attribute on struct fields
-- Account type metadata: `[package.metadata.miden] project-kind = "account"`
+- `Word` is a struct (not `[Felt; 4]`), constructed via `Word::new([...])`
+- `Felt::from_u32()` / `Felt::from_u64_unchecked()` for construction
+- `felt.as_u64()` for extraction
+- `Value.read()` / `Value.write()` are generic — return type annotation determines conversion
+- `Value.write()` returns the previous value
 
-### Build Pipeline
-- `cargo miden build --release` → produces `.masp` file
-- Template counter (no storage): 9KB .masp
-- With Value storage: 40KB .masp
-- With Value + StorageMap: 52KB .masp
+### Build Sizes
+- Template counter: 9KB .masp
 - Combat engine program: 145KB .masp
-- Build time: ~0.2s incremental, ~40s clean
-
-### Combat Execution in Miden VM
-- Single turn: ~57k cycles, ~40ms
-- 1v1 fight to KO (2 rounds): ~101k cycles, ~55ms
-- **Output matches native Rust** — verified deterministic
-- Must inline combat logic (no large struct returns through function calls)
-- `resolve_turn_mut` added to combat-engine for Miden-friendly in-place mutation
+- Arena account component (21 slots, full combat): 381KB .masp
 
 ### Known Issues
-- `cargo miden test` fails with macro expansion error (`Felt` tuple vs struct variant mismatch)
-- Large struct returns miscompiled (compiler v0.7.1 bug) — workaround: inline
-- `#[inline(always)]` not sufficient across crate boundaries — must physically inline
-
-## Next Steps (Phase 2 Concrete Plan)
-
-- [ ] Rename `counter-test` → `arena-account` with real arena storage layout
-- [ ] Define arena storage schema (game counter, game states map, champion registry)
-- [ ] Implement arena account component with inlined combat resolution
-- [ ] Serialize/deserialize ChampionState to/from Word storage format
-- [ ] Set up proving pipeline (cargo miden build + miden vm prove)
+- `cargo miden test` fails with macro expansion error
+- Large struct returns miscompiled (compiler v0.7.1 bug) — reported to Dennis with repro zip
+- `#[inline(always)]` not sufficient across crate boundaries

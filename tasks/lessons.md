@@ -58,3 +58,28 @@
 - Instead, inline the combat logic or use `resolve_turn_mut` with `#[inline(always)]`
 - The on-chain account doesn't need the event log — only the final state matters
 - Events are for the client-side TypeScript engine (animation/UI)
+
+## 2026-02-24: Arena Account Component (Phase 2)
+
+### Miden SDK Felt/Word API Gotchas
+- `Word` is a **struct** (not `[Felt; 4]`) — construct via `Word::new([f0, f1, f2, f3])`
+- No `Felt::ZERO` constant — use `Felt::from_u32(0)`
+- No `Felt::from(u64)` — use `Felt::from_u64_unchecked(v)` (panics if > field modulus)
+- `felt.as_u64()` for extraction (or `felt.into()` where `u64` return is inferred)
+- `Value.write(val)` **returns** the previous value — ignore with `let _ =` or bind
+- `Value.read()` is generic: return type annotation (`Felt` vs `Word`) controls conversion
+- **Borrow checker**: `self.write_helper(&self.field, v)` fails (simultaneous &mut self + &self). Write directly: `self.field.write(v)`
+
+### 21 Value Fields Works
+- The `#[component]` macro handles 21 `Value` storage fields without issue
+- No need for `StorageMap` fallback — Value slots are sufficient
+- Slot numbering follows declaration order (slot 0 = first field, slot 20 = last)
+
+### Champion State Packing
+- Pure Rust `[u64; 4]` packing in combat-engine enables native testing without Miden SDK dependency
+- Arena account converts `[u64; 4] ↔ Word` at the boundary
+- 7 roundtrip tests verify correctness across all 10 champions, buff states, KO states
+
+### Arena Account Build Size
+- 381KB .masp with 21 storage slots, 6 procedures, inlined combat resolution
+- Comparable to the 145KB combat-test program (which had only 1 procedure)

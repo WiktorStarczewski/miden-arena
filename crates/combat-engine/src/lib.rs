@@ -6,3 +6,4 @@ pub mod champions;
 pub mod damage;
 pub mod codec;
 pub mod combat;
+pub mod pack;
