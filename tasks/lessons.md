@@ -83,3 +83,91 @@
 ### Arena Account Build Size
 - 381KB .masp with 21 storage slots, 6 procedures, inlined combat resolution
 - Comparable to the 145KB combat-test program (which had only 1 procedure)
+
+## 2026-02-24: Phase 3 — Hash, Timeouts, Payouts & Note Scripts
+
+### RPO Hash API
+- `hash_elements(Vec<Felt>) -> Digest` — RPO256, ~1 cycle in Miden VM
+- `Digest.inner` gives the `Word` (4 Felts) — direct field access
+- RPO gives full 256-bit security (vs SHA-256 which would need 32-bit truncation in Felt)
+- Import: `use miden::hash_elements;` (re-exported from `miden_stdlib_sys`)
+
+### Block Height API
+- `tx::get_block_number() -> Felt` — returns current block as a single Felt
+- Import: `use miden::tx;`
+- Usable in account component context (kernel procedure)
+
+### Output Note API (P2ID Payouts)
+- `output_note::create(tag, note_type, recipient) -> NoteIdx`
+- `output_note::add_asset(asset, note_idx)` — attach asset to note
+- `Recipient::compute(serial_num: Word, script_digest: Digest, inputs: Vec<Felt>) -> Recipient`
+- `asset::build_fungible_asset(faucet_id: AccountId, amount: Felt) -> Asset`
+- Types: `Tag`, `NoteType`, `NoteIdx`, `Recipient`, `Asset`, `AccountId`, `Digest`
+- All from `use miden::{...}` (re-exported from `miden_base_sys::bindings`)
+
+### AccountId is 2 Felts
+- `AccountId { prefix: Felt, suffix: Felt }` — constructor: `AccountId::new(prefix, suffix)`
+- Player storage must use Word `[prefix, suffix, 0, 0]` for full ID
+- P2ID note inputs: `[target_prefix, target_suffix]`
+
+### WIT Naming Constraint
+- `#[component]` macro converts Rust parameter names to WIT kebab-case
+- Parameters like `commit_0` become `commit-0` in WIT — INVALID (digit after dash)
+- **Lesson:** Never use digits-after-underscore in public procedure parameter names
+- Use `commit_a, commit_b, commit_c, commit_d` instead of `commit_0..3`
+
+### Note Script Limitations in Rust
+- `#[note]` struct + impl, `#[note_script]` on entrypoint method
+- Entrypoint signature: `fn execute(self, arg: Word)` or `fn execute(self, arg: Word, account: &mut Account)`
+- `Account` parameter only provides `ActiveAccount` trait (read-only: `get_id`, `get_balance`, etc.)
+- **Cannot** call custom account procedures from Rust note scripts
+- For calling `join`, `set_team`, `submit_commit`, etc., need MASM note scripts
+- `active_note::get_inputs() -> Vec<Felt>` and `active_note::get_sender() -> AccountId` work fine
+- `project-kind = "note-script"` (NOT `"note"`) in Cargo.toml metadata
+
+### P2ID Note Convention
+- P2ID script is a well-known MASM script in `miden-standards`
+- Script hash is computed at runtime (not a compile-time constant)
+- Must store P2ID script digest in account storage (`p2id_script_hash` slot)
+- P2ID note inputs: exactly 2 Felts = `[target_prefix, target_suffix]`
+- Note serial_num must be unique per payout to avoid nullifier collisions
+
+### Payout Serial Number Uniqueness
+- Two notes with same (serial_num, script_hash, inputs) produce same recipient/nullifier
+- In draw payouts to different players, inputs differ → safe
+- But same player receiving two payouts needs distinct serial_nums
+- Pattern: use round number for combat payouts, high offset (1_000_000+) for timeout payouts
+
+## 2026-02-24: Cross-Context Note Scripts (Phase 3b)
+
+### Note Scripts CAN Call Custom Account Procedures
+- The `#[note]`/`#[note_script]` macro pattern only provides `ActiveAccount` trait (read-only)
+- **Solution:** Use `miden::generate!()` + `bindings::export!()` pattern instead
+- Note scripts import the account's WIT interface and call procedures as regular functions
+- This is the same pattern used in `miden-compiler/tests/rust-apps-wasm/rust-sdk/cross-ctx-note/`
+
+### Cross-Context Calling Pattern
+- **Account side:** Keep `#[component]` macro — it auto-generates WIT at `target/generated-wit/`
+- **Note side:** Manual WIT world file that `import`s account interface, `export`s `miden:base/note-script@1.0.0`
+- **Cargo.toml metadata sections required:**
+  - `[package.metadata.miden.dependencies]` — references account crate path
+  - `[package.metadata.component.target.dependencies]` — references account WIT file path
+- **Rust code:** `miden::generate!()` creates `bindings` module, `bindings::export!(StructName)` wires it
+- **Import path:** `bindings::miden::arena_account::arena_account::function_name` (WIT kebab-case → Rust snake_case)
+
+### WIT File Management
+- Copy generated WIT from `target/generated-wit/` to `contracts/<name>/wit/` for stability
+- Note scripts reference the stable path, not `target/` which gets cleaned by `cargo clean`
+- Build order matters: account must be built first to generate WIT, then note scripts
+
+### Asset Type Works in WIT
+- `Asset` Rust type maps cleanly to WIT `asset` type (from `core-types`)
+- The `#[component]` macro auto-generates `use core-types.{asset, felt}` in WIT
+- `receive_asset(asset: Asset)` compiles and builds without issues
+- Pattern from `basic-wallet` example: `self.add_asset(asset)` works in `#[component]`
+
+### SDK Functions Available in generate!() Pattern
+- `active_note::get_sender()` → `AccountId { prefix, suffix }`
+- `active_note::get_assets()` → `Vec<Asset>` (note assets)
+- `active_note::get_inputs()` → `Vec<Felt>` (note inputs)
+- All available via `use miden::*` — SDK functions work in both `#[note_script]` and `generate!()` patterns

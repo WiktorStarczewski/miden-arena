@@ -1731,6 +1731,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "process-stake-note"
+version = "0.1.0"
+dependencies = [
+ "miden",
+]
+
+[[package]]
+name = "process-team-note"
+version = "0.1.0"
+dependencies = [
+ "miden",
+]
+
+[[package]]
 name = "proptest"
 version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2150,6 +2164,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2a8f8038e7e7969abb3f1b7c2a811225e9296da208539e0f79c5251d6cac0025"
 dependencies = [
  "vte",
+]
+
+[[package]]
+name = "submit-move-note"
+version = "0.1.0"
+dependencies = [
+ "miden",
 ]
 
 [[package]]

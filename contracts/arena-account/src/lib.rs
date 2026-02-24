@@ -3,7 +3,10 @@
 
 extern crate alloc;
 
-use miden::{component, Felt, Value, ValueAccess, Word};
+use miden::{
+    asset, component, hash_elements, output_note, tx, AccountId, Asset, Digest, Felt, NoteType,
+    Recipient, Tag, Value, ValueAccess, Word,
+};
 
 use combat_engine::champions::get_champion;
 use combat_engine::combat::init_champion_state;
@@ -61,6 +64,7 @@ struct TurnAction {
 }
 
 fn decode_move(encoded: u32) -> TurnAction {
+    assert!(encoded >= 1 && encoded <= 20, "invalid encoded move");
     TurnAction {
         champion_id: ((encoded - 1) / 2) as u8,
         ability_index: ((encoded - 1) % 2) as u8,
@@ -68,16 +72,16 @@ fn decode_move(encoded: u32) -> TurnAction {
 }
 
 // ---------------------------------------------------------------------------
-// Arena Account Component — 21 storage slots
+// Arena Account Component — 23 storage slots
 // ---------------------------------------------------------------------------
 
 #[component]
 struct ArenaAccount {
     #[storage(description = "0=waiting,1=player_a_joined,2=both_joined,3=combat,4=resolved")]
     game_state: Value,
-    #[storage(description = "Player A account ID")]
+    #[storage(description = "Player A account ID [prefix, suffix, 0, 0]")]
     player_a: Value,
-    #[storage(description = "Player B account ID")]
+    #[storage(description = "Player B account ID [prefix, suffix, 0, 0]")]
     player_b: Value,
     #[storage(description = "Player A team [c0, c1, c2, 0]")]
     team_a: Value,
@@ -115,6 +119,10 @@ struct ArenaAccount {
     stake_b: Value,
     #[storage(description = "Bitfield: bit0=team_a set, bit1=team_b set")]
     teams_submitted: Value,
+    #[storage(description = "Faucet AccountId [prefix, suffix, 0, 0] for stake token")]
+    faucet_id: Value,
+    #[storage(description = "P2ID note script digest [d0, d1, d2, d3]")]
+    p2id_script_hash: Value,
 }
 
 #[component]
@@ -193,31 +201,70 @@ impl ArenaAccount {
     }
 
     // -----------------------------------------------------------------------
+    // P2ID payout helper
+    // -----------------------------------------------------------------------
+
+    fn send_payout(&self, target_player: &Word, amount: u64, payout_id: u64) {
+        let serial_num = Word::from_u64_unchecked(payout_id, 0, 0, 0);
+        let p2id_hash: Word = self.p2id_script_hash.read();
+        let p2id_digest = Digest::from_word(p2id_hash);
+
+        // P2ID note inputs: [target_prefix, target_suffix]
+        let inputs = alloc::vec![target_player[0], target_player[1]];
+        let recipient = Recipient::compute(serial_num, p2id_digest, inputs);
+
+        let tag = Tag::from(felt_zero());
+        let note_type = NoteType::from(u64_to_felt(1)); // public
+        let note_idx = output_note::create(tag, note_type, recipient);
+
+        // Build fungible asset
+        let faucet_word: Word = self.faucet_id.read();
+        let faucet = AccountId::new(faucet_word[0], faucet_word[1]);
+        let fungible_asset = asset::build_fungible_asset(faucet, u64_to_felt(amount));
+        output_note::add_asset(fungible_asset, note_idx);
+    }
+
+    // -----------------------------------------------------------------------
+    // Public procedures
+    //
+    // SECURITY: Caller authentication is the responsibility of the consuming
+    // note scripts. These procedures accept player_prefix/player_suffix as
+    // parameters and trust them. The note scripts must verify the caller's
+    // identity (e.g., via active_note::get_sender()) before invoking these.
+    // -----------------------------------------------------------------------
+
+    // -----------------------------------------------------------------------
     // join — first or second player joins the arena
     // -----------------------------------------------------------------------
 
-    pub fn join(&mut self, player_id: Felt, stake: Felt) {
+    pub fn join(&mut self, player_prefix: Felt, player_suffix: Felt, stake: Felt) {
         let stake_val = stake.as_u64();
         assert!(stake_val == STAKE_AMOUNT, "incorrect stake amount");
+
+        let player_word = Word::new([player_prefix, player_suffix, felt_zero(), felt_zero()]);
 
         let state: Felt = self.game_state.read();
         let state_val = state.as_u64();
 
         match state_val {
             0 => {
-                self.player_a.write(player_id);
+                self.player_a.write(player_word);
                 self.stake_a.write(stake);
                 self.game_state.write(u64_to_felt(1));
-                // TODO: timeout_height = current_block + TIMEOUT_BLOCKS
-                self.timeout_height.write(u64_to_felt(TIMEOUT_BLOCKS));
+                let current_block = tx::get_block_number().as_u64();
+                self.timeout_height.write(u64_to_felt(current_block + TIMEOUT_BLOCKS));
             }
             1 => {
-                let existing_a: Felt = self.player_a.read();
-                assert!(existing_a.as_u64() != player_id.as_u64(), "cannot play yourself");
-                self.player_b.write(player_id);
+                let pa: Word = self.player_a.read();
+                assert!(
+                    !(player_prefix == pa[0] && player_suffix == pa[1]),
+                    "cannot play yourself"
+                );
+                self.player_b.write(player_word);
                 self.stake_b.write(stake);
                 self.game_state.write(u64_to_felt(2));
-                self.timeout_height.write(u64_to_felt(TIMEOUT_BLOCKS));
+                let current_block = tx::get_block_number().as_u64();
+                self.timeout_height.write(u64_to_felt(current_block + TIMEOUT_BLOCKS));
             }
             _ => panic!("game already full"),
         }
@@ -227,15 +274,22 @@ impl ArenaAccount {
     // set_team — player submits their team of 3 champions
     // -----------------------------------------------------------------------
 
-    pub fn set_team(&mut self, player_id: Felt, c0: Felt, c1: Felt, c2: Felt) {
+    pub fn set_team(
+        &mut self,
+        player_prefix: Felt,
+        player_suffix: Felt,
+        c0: Felt,
+        c1: Felt,
+        c2: Felt,
+    ) {
         let state: Felt = self.game_state.read();
         assert!(state.as_u64() == 2, "must be in both_joined state");
 
-        let pid = player_id.as_u64();
-        let pa: Felt = self.player_a.read();
-        let pb: Felt = self.player_b.read();
-        let is_player_a = pid == pa.as_u64();
-        assert!(is_player_a || pid == pb.as_u64(), "not a player in this game");
+        let pa: Word = self.player_a.read();
+        let pb: Word = self.player_b.read();
+        let is_player_a = player_prefix == pa[0] && player_suffix == pa[1];
+        let is_player_b = player_prefix == pb[0] && player_suffix == pb[1];
+        assert!(is_player_a || is_player_b, "not a player in this game");
 
         let teams_sub_felt: Felt = self.teams_submitted.read();
         let teams_sub = teams_sub_felt.as_u64();
@@ -291,8 +345,8 @@ impl ArenaAccount {
 
         if new_teams_sub == 0b11 {
             self.game_state.write(u64_to_felt(3));
-            // TODO: timeout_height = current_block + TIMEOUT_BLOCKS
-            self.timeout_height.write(u64_to_felt(TIMEOUT_BLOCKS));
+            let current_block = tx::get_block_number().as_u64();
+            self.timeout_height.write(u64_to_felt(current_block + TIMEOUT_BLOCKS));
         }
     }
 
@@ -300,15 +354,23 @@ impl ArenaAccount {
     // submit_commit — player submits a hash commitment for their move
     // -----------------------------------------------------------------------
 
-    pub fn submit_commit(&mut self, player_id: Felt, hash_part1: Felt, hash_part2: Felt) {
+    pub fn submit_commit(
+        &mut self,
+        player_prefix: Felt,
+        player_suffix: Felt,
+        commit_a: Felt,
+        commit_b: Felt,
+        commit_c: Felt,
+        commit_d: Felt,
+    ) {
         let state: Felt = self.game_state.read();
         assert!(state.as_u64() == 3, "must be in combat state");
 
-        let pid = player_id.as_u64();
-        let pa: Felt = self.player_a.read();
-        let pb: Felt = self.player_b.read();
-        let is_player_a = pid == pa.as_u64();
-        assert!(is_player_a || pid == pb.as_u64(), "not a player in this game");
+        let pa: Word = self.player_a.read();
+        let pb: Word = self.player_b.read();
+        let is_player_a = player_prefix == pa[0] && player_suffix == pa[1];
+        let is_player_b = player_prefix == pb[0] && player_suffix == pb[1];
+        assert!(is_player_a || is_player_b, "not a player in this game");
 
         let existing: Word = if is_player_a {
             self.move_a_commit.read()
@@ -317,7 +379,7 @@ impl ArenaAccount {
         };
         assert!(word_is_empty(&existing), "already committed this round");
 
-        let commit_word = Word::new([hash_part1, hash_part2, felt_zero(), felt_zero()]);
+        let commit_word = Word::new([commit_a, commit_b, commit_c, commit_d]);
         if is_player_a {
             self.move_a_commit.write(commit_word);
         } else {
@@ -326,12 +388,13 @@ impl ArenaAccount {
     }
 
     // -----------------------------------------------------------------------
-    // submit_reveal — player reveals their move (SHA-256 verification deferred)
+    // submit_reveal — player reveals their move with RPO hash verification
     // -----------------------------------------------------------------------
 
     pub fn submit_reveal(
         &mut self,
-        player_id: Felt,
+        player_prefix: Felt,
+        player_suffix: Felt,
         encoded_move: Felt,
         nonce_p1: Felt,
         nonce_p2: Felt,
@@ -339,11 +402,11 @@ impl ArenaAccount {
         let state: Felt = self.game_state.read();
         assert!(state.as_u64() == 3, "must be in combat state");
 
-        let pid = player_id.as_u64();
-        let pa: Felt = self.player_a.read();
-        let pb: Felt = self.player_b.read();
-        let is_player_a = pid == pa.as_u64();
-        assert!(is_player_a || pid == pb.as_u64(), "not a player in this game");
+        let pa: Word = self.player_a.read();
+        let pb: Word = self.player_b.read();
+        let is_player_a = player_prefix == pa[0] && player_suffix == pa[1];
+        let is_player_b = player_prefix == pb[0] && player_suffix == pb[1];
+        assert!(is_player_a || is_player_b, "not a player in this game");
 
         // Must have committed
         let commitment: Word = if is_player_a {
@@ -361,8 +424,16 @@ impl ArenaAccount {
         };
         assert!(word_is_empty(&existing_reveal), "already revealed this round");
 
-        // TODO: SHA-256 hash verification
-        // Verify hash(encoded_move || nonce) matches commitment
+        // RPO hash verification: hash(encoded_move, nonce_p1, nonce_p2) must match commitment
+        let computed: Digest = hash_elements(alloc::vec![encoded_move, nonce_p1, nonce_p2]);
+        let hash_word: Word = computed.inner;
+        assert!(
+            hash_word[0] == commitment[0]
+                && hash_word[1] == commitment[1]
+                && hash_word[2] == commitment[2]
+                && hash_word[3] == commitment[3],
+            "commitment mismatch"
+        );
 
         // Validate move legality
         let em = encoded_move.as_u64() as u32;
@@ -522,7 +593,30 @@ impl ArenaAccount {
             self.winner.write(u64_to_felt(winner_val));
             self.game_state.write(u64_to_felt(4));
 
-            // TODO: send_p2id payouts
+            let pa: Word = self.player_a.read();
+            let pb: Word = self.player_b.read();
+            let stake_a_val: Felt = self.stake_a.read();
+            let stake_b_val: Felt = self.stake_b.read();
+            let total_stake = stake_a_val.as_u64() + stake_b_val.as_u64();
+
+            let round_num: Felt = self.round.read();
+            let round_id = round_num.as_u64();
+            match winner_val {
+                1 => {
+                    // Player A wins — gets total stake
+                    self.send_payout(&pa, total_stake, round_id);
+                }
+                2 => {
+                    // Player B wins — gets total stake
+                    self.send_payout(&pb, total_stake, round_id);
+                }
+                3 => {
+                    // Draw — refund both (distinct IDs to avoid note collision)
+                    self.send_payout(&pa, stake_a_val.as_u64(), round_id);
+                    self.send_payout(&pb, stake_b_val.as_u64(), round_id + 1);
+                }
+                _ => panic!("unreachable winner state"),
+            }
         } else {
             // Reset for next round
             let round_felt: Felt = self.round.read();
@@ -531,53 +625,51 @@ impl ArenaAccount {
             self.move_b_commit.write(empty_word());
             self.move_a_reveal.write(empty_word());
             self.move_b_reveal.write(empty_word());
-            // TODO: timeout_height = current_block + TIMEOUT_BLOCKS
-            self.timeout_height.write(u64_to_felt(TIMEOUT_BLOCKS));
+            let current_block = tx::get_block_number().as_u64();
+            self.timeout_height.write(u64_to_felt(current_block + TIMEOUT_BLOCKS));
         }
     }
 
     // -----------------------------------------------------------------------
-    // claim_timeout — handle abandoned games (P2ID note creation deferred)
+    // claim_timeout — handle abandoned games with P2ID payouts
     // -----------------------------------------------------------------------
 
-    pub fn claim_timeout(&mut self, player_id: Felt) {
+    pub fn claim_timeout(&mut self, player_prefix: Felt, player_suffix: Felt) {
         let state: Felt = self.game_state.read();
         let state_val = state.as_u64();
         assert!(state_val >= 1 && state_val <= 3, "game not active");
 
-        // TODO: verify current_block > timeout_height
-        // let current_block = tx::block_number();
-        // let timeout: Felt = self.timeout_height.read();
-        // assert!(current_block > timeout.as_u64(), "timeout not reached");
+        let current_block = tx::get_block_number().as_u64();
+        let timeout: Felt = self.timeout_height.read();
+        assert!(current_block > timeout.as_u64(), "timeout not reached");
 
-        let pid = player_id.as_u64();
+        let pa: Word = self.player_a.read();
+        let pb: Word = self.player_b.read();
+        let is_player_a = player_prefix == pa[0] && player_suffix == pa[1];
+        let is_player_b = player_prefix == pb[0] && player_suffix == pb[1];
+
+        let stake_a_felt: Felt = self.stake_a.read();
+        let stake_b_felt: Felt = self.stake_b.read();
+
+        // Payout IDs use high bits to avoid collision with resolve_current_turn payouts
+        // (which use round numbers starting at 0)
+        let timeout_payout_base: u64 = 1_000_000 + state_val;
 
         match state_val {
             1 => {
-                // Only player A has joined
-                let pa: Felt = self.player_a.read();
-                assert!(pid == pa.as_u64(), "only player A can claim in state 1");
-                // TODO: send_p2id(player_a, stake_a)
+                // Only player A has joined — refund
+                assert!(is_player_a, "only player A can claim in state 1");
+                self.send_payout(&pa, stake_a_felt.as_u64(), timeout_payout_base);
             }
             2 => {
                 // Both joined, teams phase — refund both
-                let pa: Felt = self.player_a.read();
-                let pb: Felt = self.player_b.read();
-                assert!(
-                    pid == pa.as_u64() || pid == pb.as_u64(),
-                    "not a player in this game"
-                );
-                // TODO: send_p2id(player_a, stake_a)
-                // TODO: send_p2id(player_b, stake_b)
+                assert!(is_player_a || is_player_b, "not a player in this game");
+                self.send_payout(&pa, stake_a_felt.as_u64(), timeout_payout_base);
+                self.send_payout(&pb, stake_b_felt.as_u64(), timeout_payout_base + 1);
             }
             3 => {
                 // Combat phase — determine who is inactive
-                let pa: Felt = self.player_a.read();
-                let pb: Felt = self.player_b.read();
-                assert!(
-                    pid == pa.as_u64() || pid == pb.as_u64(),
-                    "not a player in this game"
-                );
+                assert!(is_player_a || is_player_b, "not a player in this game");
 
                 let commit_a: Word = self.move_a_commit.read();
                 let commit_b: Word = self.move_b_commit.read();
@@ -599,22 +691,31 @@ impl ArenaAccount {
                     0
                 };
 
+                let total_stake = stake_a_felt.as_u64() + stake_b_felt.as_u64();
                 if a_progress > b_progress {
                     self.winner.write(u64_to_felt(1));
-                    // TODO: send_p2id(player_a, stake_a + stake_b)
+                    self.send_payout(&pa, total_stake, timeout_payout_base);
                 } else if b_progress > a_progress {
                     self.winner.write(u64_to_felt(2));
-                    // TODO: send_p2id(player_b, stake_a + stake_b)
+                    self.send_payout(&pb, total_stake, timeout_payout_base);
                 } else {
                     self.winner.write(u64_to_felt(3));
-                    // TODO: send_p2id(player_a, stake_a)
-                    // TODO: send_p2id(player_b, stake_b)
+                    self.send_payout(&pa, stake_a_felt.as_u64(), timeout_payout_base);
+                    self.send_payout(&pb, stake_b_felt.as_u64(), timeout_payout_base + 1);
                 }
             }
             _ => panic!("invalid state for timeout"),
         }
 
         self.game_state.write(u64_to_felt(4));
+    }
+
+    // -----------------------------------------------------------------------
+    // receive_asset — accept an asset into the account vault
+    // -----------------------------------------------------------------------
+
+    pub fn receive_asset(&mut self, asset: Asset) {
+        self.add_asset(asset);
     }
 }
 
@@ -641,7 +742,7 @@ fn inline_execute_action(
             let (dmg, _) =
                 calculate_damage(actor_champ, target_champ, target_state, ability, actor_state);
             target_state.current_hp = target_state.current_hp.saturating_sub(dmg);
-            actor_state.total_damage_dealt += dmg;
+            actor_state.total_damage_dealt = actor_state.total_damage_dealt.saturating_add(dmg);
             if target_state.current_hp == 0 {
                 target_state.is_ko = true;
             }
@@ -650,7 +751,7 @@ fn inline_execute_action(
             let (dmg, _) =
                 calculate_damage(actor_champ, target_champ, target_state, ability, actor_state);
             target_state.current_hp = target_state.current_hp.saturating_sub(dmg);
-            actor_state.total_damage_dealt += dmg;
+            actor_state.total_damage_dealt = actor_state.total_damage_dealt.saturating_add(dmg);
             if target_state.current_hp == 0 {
                 target_state.is_ko = true;
             }

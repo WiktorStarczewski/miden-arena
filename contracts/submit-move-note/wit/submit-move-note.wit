@@ -1,0 +1,6 @@
+package miden:submit-move-note@0.1.0;
+
+world submit-move-note-world {
+    import miden:arena-account/arena-account@0.1.0;
+    export miden:base/note-script@1.0.0;
+}
