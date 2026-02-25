@@ -4,6 +4,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CONTRACTS_DIR="$REPO_ROOT/contracts"
 TARGET_DIR="$REPO_ROOT/target/miden/release"
+MASM_OUTPUT="$REPO_ROOT/target/masm-combat"
 PUBLIC_DIR="$REPO_ROOT/public/contracts"
 CONFIG_FILE="$REPO_ROOT/src/constants/contracts.ts"
 
@@ -34,30 +35,26 @@ fi
 mkdir -p "$CONTRACTS_DIR/matchmaking-account/wit"
 cp "$MM_WIT" "$CONTRACTS_DIR/matchmaking-account/wit/miden-matchmaking-account.wit"
 
-# Build combat account
-(cd "$CONTRACTS_DIR/combat-account" && cargo miden build --release)
-CB_WIT="$CONTRACTS_DIR/combat-account/target/generated-wit/miden-combat-account.wit"
-if [ ! -f "$CB_WIT" ]; then
-  echo "ERROR: Generated WIT not found at $CB_WIT"
-  exit 1
-fi
-mkdir -p "$CONTRACTS_DIR/combat-account/wit"
-cp "$CB_WIT" "$CONTRACTS_DIR/combat-account/wit/miden-combat-account.wit"
+# Build MASM combat account + its note scripts (init_combat, submit_move)
+cargo run -p combat-account-masm --release
+# Outputs: target/masm-combat/combat_account.masp
+#          target/masm-combat/init_combat_note.masp
+#          target/masm-combat/submit_move_note.masp
 
-# Build note scripts (depend on account WIT files)
+# Build matchmaking-targeting note scripts (depend on matchmaking WIT)
 (cd "$CONTRACTS_DIR/process-stake-note" && cargo miden build --release)
 (cd "$CONTRACTS_DIR/process-team-note" && cargo miden build --release)
-(cd "$CONTRACTS_DIR/submit-move-note" && cargo miden build --release)
-(cd "$CONTRACTS_DIR/init-combat-note" && cargo miden build --release)
 (cd "$CONTRACTS_DIR/process-result-note" && cargo miden build --release)
 
 echo "=== Step 2: Copy .masp to public/contracts/ ==="
 mkdir -p "$PUBLIC_DIR"
-cp "$TARGET_DIR/process_stake_note.masp" "$PUBLIC_DIR/"
-cp "$TARGET_DIR/process_team_note.masp" "$PUBLIC_DIR/"
-cp "$TARGET_DIR/submit_move_note.masp"  "$PUBLIC_DIR/"
-cp "$TARGET_DIR/init_combat_note.masp"  "$PUBLIC_DIR/"
+# Matchmaking note scripts (from cargo miden build)
+cp "$TARGET_DIR/process_stake_note.masp"  "$PUBLIC_DIR/"
+cp "$TARGET_DIR/process_team_note.masp"   "$PUBLIC_DIR/"
 cp "$TARGET_DIR/process_result_note.masp" "$PUBLIC_DIR/"
+# Combat note scripts (from MASM build)
+cp "$MASM_OUTPUT/init_combat_note.masp"   "$PUBLIC_DIR/"
+cp "$MASM_OUTPUT/submit_move_note.masp"   "$PUBLIC_DIR/"
 
 echo "=== Step 3: Sync client state ==="
 "$MIDEN_CLIENT" sync 2>&1 || true
@@ -83,13 +80,13 @@ if [[ ! "$MATCHMAKING_ID" =~ ^0x[0-9a-fA-F]+$ ]]; then
   exit 1
 fi
 
-echo "=== Step 5: Deploy combat account ==="
+echo "=== Step 5: Deploy combat account (MASM) ==="
 CB_DEPLOY_OUTPUT=$("$MIDEN_CLIENT" new-account \
   --account-type regular-account-updatable-code \
   --storage-mode public \
   -p auth/no-auth \
   -p basic-wallet \
-  -p "$TARGET_DIR/combat_account.masp" \
+  -p "$MASM_OUTPUT/combat_account.masp" \
   --deploy 2>&1)
 
 echo "$CB_DEPLOY_OUTPUT"

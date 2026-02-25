@@ -6,6 +6,7 @@ members = [
     "contracts/combat-test",
     "contracts/matchmaking-account",
     "contracts/combat-account",
+    "contracts/combat-account-masm",
     "contracts/submit-move-note",
     "contracts/process-team-note",
     "contracts/process-stake-note",

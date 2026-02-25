@@ -1,0 +1,16 @@
+[package]
+name = "combat-account-masm"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+miden-protocol = { version = "0.13", features = ["std", "testing"] }
+miden-standards = "0.13"
+miden-mast-package = "0.20"
+semver = "1"
+
+[dev-dependencies]
+miden-testing = "0.13"
+miden-tx = "0.13"
+tokio = { version = "1", features = ["rt", "macros"] }
+rand = "0.9"
