@@ -3,18 +3,18 @@ export type Element = "fire" | "water" | "earth" | "wind";
 export interface Ability {
   name: string;
   power: number;
-  type: "damage" | "heal" | "buff" | "debuff" | "damage_dot";
+  type: "damage" | "heal" | "stat_mod";
   description: string;
-  /** For buffs/debuffs: stat affected */
+  /** For stat_mod: stat affected */
   stat?: "defense" | "speed" | "attack";
-  /** For buffs/debuffs: value added/subtracted */
+  /** For stat_mod: value added/subtracted */
   statValue?: number;
-  /** Duration in turns (for buffs/debuffs/dots) */
+  /** Duration in turns (for stat_mod) */
   duration?: number;
   /** For heals: amount restored */
   healAmount?: number;
-  /** For damage_dot: applies burn */
-  appliesBurn?: boolean;
+  /** For stat_mod: true = debuff opponent, false = buff self */
+  isDebuff?: boolean;
 }
 
 export interface Champion {
@@ -41,7 +41,6 @@ export interface ChampionState {
   currentHp: number;
   maxHp: number;
   buffs: Buff[];
-  burnTurns: number;
   isKO: boolean;
   totalDamageDealt: number;
 }
@@ -63,6 +62,4 @@ export type TurnEvent =
   | { type: "heal"; championId: number; amount: number; newHp: number }
   | { type: "buff"; championId: number; stat: string; value: number; duration: number }
   | { type: "debuff"; targetId: number; stat: string; value: number; duration: number }
-  | { type: "burn_tick"; championId: number; damage: number }
-  | { type: "ko"; championId: number }
-  | { type: "burn_applied"; targetId: number; duration: number };
+  | { type: "ko"; championId: number };

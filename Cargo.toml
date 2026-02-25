@@ -1,0 +1,15 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/combat-engine",
+    "contracts/counter-test",
+    "contracts/combat-test",
+    "contracts/matchmaking-account",
+    "contracts/combat-account",
+    "contracts/combat-account-masm",
+    "contracts/submit-move-note",
+    "contracts/process-team-note",
+    "contracts/process-stake-note",
+    "contracts/init-combat-note",
+    "contracts/process-result-note",
+]

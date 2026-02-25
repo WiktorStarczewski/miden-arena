@@ -1,37 +1,29 @@
 /**
- * useStaking - P2IDE (Pay-to-ID with Expiry) stake management.
+ * useStaking — Arena-based staking via process_stake_note.
  *
- * Before battle begins, both players lock a stake (10 MIDEN) into a note
- * that is consumable by the opponent's session wallet. The note includes
- * a `recallHeight` so the sender can reclaim their tokens if the game is
- * abandoned.
+ * Sends a stake note to the arena account which triggers the `join()` procedure.
+ * Opponent staking is detected by polling arena state (gameState >= 2 means both joined).
  *
- * Flow:
- *  1. `sendStake()` - Sends STAKE_AMOUNT to the opponent with a recall height.
- *  2. Detects the opponent's stake note and consumes it.
- *  3. On game end:
- *     - **Winner** keeps the opponent's consumed stake.
- *     - `withdraw()` sends all session wallet funds back to the MidenFi wallet.
- *
- * The staking notes are identified by their exact amount (STAKE_AMOUNT = 10 MIDEN).
+ * Withdrawal sends remaining session wallet funds back to the MidenFi wallet via P2ID.
  */
 
-import { useState, useCallback, useEffect, useRef } from "react";
-import { useSend, useConsume, useSyncState } from "@miden-sdk/react";
+import { useState, useCallback } from "react";
+import { useSend, useMiden } from "@miden-sdk/react";
 import { useGameStore } from "../store/gameStore";
-import { useNoteDecoder } from "./useNoteDecoder";
-import { MIDEN_FAUCET_ID, STAKE_AMOUNT, RECALL_BLOCK_OFFSET } from "../constants/miden";
+import { useArenaState } from "./useArenaState";
+import { buildStakeNote, submitArenaNote } from "../utils/arenaNote";
+import { MIDEN_FAUCET_ID, STAKE_AMOUNT, MATCHMAKING_ACCOUNT_ID } from "../constants/miden";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 export interface UseStakingReturn {
-  /** Send the stake to the opponent. */
+  /** Send the stake to the arena (triggers join). */
   sendStake: () => Promise<void>;
   /** Whether the local player has sent their stake. */
   hasStaked: boolean;
-  /** Whether the opponent's stake note has been detected and consumed. */
+  /** Whether both players have staked (arena gameState >= 2). */
   opponentStaked: boolean;
   /** Withdraw all session wallet funds back to the MidenFi wallet. */
   withdraw: () => Promise<void>;
@@ -46,29 +38,23 @@ export interface UseStakingReturn {
 // ---------------------------------------------------------------------------
 
 export function useStaking(): UseStakingReturn {
-  const opponentId = useGameStore((s) => s.match.opponentId);
-  const midenFiAddress = useGameStore((s) => s.setup.midenFiAddress);
   const sessionWalletId = useGameStore((s) => s.setup.sessionWalletId);
+  const midenFiAddress = useGameStore((s) => s.setup.midenFiAddress);
   const winner = useGameStore((s) => s.result.winner);
 
-  const { send, stage: sendStage } = useSend();
-  const { consume } = useConsume();
-  const { syncHeight } = useSyncState();
-  const { stakeNotes } = useNoteDecoder(opponentId);
+  const { client, prover } = useMiden();
+  const { send } = useSend();
+  const { gameState, refresh } = useArenaState();
 
   const [hasStaked, setHasStaked] = useState(false);
-  const [opponentStaked, setOpponentStaked] = useState(false);
   const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Prevent double-consuming the opponent's stake
-  const consumedStakeRef = useRef(false);
-
-  // Suppress unused lint for sendStage
-  void sendStage;
+  // Both players have joined when gameState >= 2
+  const opponentStaked = gameState >= 2;
 
   // -----------------------------------------------------------------------
-  // sendStake - Lock STAKE_AMOUNT for the opponent
+  // sendStake — Submit process_stake_note to arena
   // -----------------------------------------------------------------------
   const sendStake = useCallback(async () => {
     if (hasStaked) {
@@ -76,56 +62,43 @@ export function useStaking(): UseStakingReturn {
       return;
     }
 
-    if (!opponentId) {
-      setError("No opponent connected.");
+    if (!sessionWalletId) {
+      setError("Session wallet not ready.");
+      return;
+    }
+
+    if (!client || !prover) {
+      setError("Miden client not ready.");
       return;
     }
 
     setError(null);
 
     try {
-      await send({
-        from: sessionWalletId!,
-        to: opponentId,
-        assetId: MIDEN_FAUCET_ID,
-        amount: STAKE_AMOUNT,
-        noteType: "public",
-        recallHeight: syncHeight + RECALL_BLOCK_OFFSET,
+      const note = await buildStakeNote(sessionWalletId, MATCHMAKING_ACCOUNT_ID);
+
+      await submitArenaNote({
+        client,
+        prover,
+        sessionWalletId,
+        arenaAccountId: MATCHMAKING_ACCOUNT_ID,
+        note,
+        consumeArgs: null,
       });
 
       setHasStaked(true);
+
+      // Refresh arena state to see updated gameState
+      await refresh();
+
+      console.log("[useStaking] stake submitted to arena");
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to send stake.";
+      console.error("[useStaking] sendStake failed", err);
       setError(message);
     }
-  }, [hasStaked, opponentId, sessionWalletId, syncHeight, send]);
-
-  // -----------------------------------------------------------------------
-  // Detect and consume opponent's stake note
-  // -----------------------------------------------------------------------
-  useEffect(() => {
-    if (consumedStakeRef.current || opponentStaked) return;
-    if (stakeNotes.length === 0) return;
-
-    const stakeNote = stakeNotes[0];
-    consumedStakeRef.current = true;
-
-    (async () => {
-      try {
-        await consume({
-          accountId: sessionWalletId!,
-          noteIds: [stakeNote.noteId],
-        });
-        setOpponentStaked(true);
-      } catch (err) {
-        consumedStakeRef.current = false;
-        const message =
-          err instanceof Error ? err.message : "Failed to consume opponent stake.";
-        setError(message);
-      }
-    })();
-  }, [stakeNotes, opponentStaked, sessionWalletId, consume]);
+  }, [hasStaked, sessionWalletId, client, prover, refresh]);
 
   // -----------------------------------------------------------------------
   // withdraw - Send remaining funds back to MidenFi wallet
@@ -145,15 +118,11 @@ export function useStaking(): UseStakingReturn {
     setError(null);
 
     try {
-      // Calculate the withdrawal amount.
-      // If we won, we have our remaining funds + opponent's stake.
-      // If we lost, we only have whatever is left after losing our stake.
-      // We send everything back to MidenFi; the SDK handles the balance.
       const withdrawalAmount = winner === "me"
-        ? STAKE_AMOUNT * 2n // Our original funding minus spent gas + opponent stake
+        ? STAKE_AMOUNT * 2n
         : winner === "draw"
-          ? STAKE_AMOUNT // Return our own stake in a draw
-          : 0n; // Lost - opponent already consumed our stake
+          ? STAKE_AMOUNT
+          : 0n;
 
       if (withdrawalAmount <= 0n) {
         setIsWithdrawing(false);
@@ -161,8 +130,8 @@ export function useStaking(): UseStakingReturn {
       }
 
       await send({
-        from: sessionWalletId!,
-        to: midenFiAddress!,
+        from: sessionWalletId,
+        to: midenFiAddress,
         assetId: MIDEN_FAUCET_ID,
         amount: withdrawalAmount,
         noteType: "public",

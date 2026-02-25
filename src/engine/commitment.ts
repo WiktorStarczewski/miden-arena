@@ -1,87 +1,89 @@
-import { bytesToBigInt, bigIntToBytes, concatBytes } from "../utils/bytes";
+/**
+ * commitment.ts — RPO256-based commit-reveal for combat moves.
+ *
+ * Replaces the previous SHA-256 scheme. The hash must match the arena
+ * contract's verification: hash_elements(vec![encoded_move, nonce_p1, nonce_p2]).
+ */
+
+import { Rpo256, FeltArray, Felt } from "@miden-sdk/miden-sdk";
+import { randomFelt } from "../utils/arenaNote";
+import type { CommitData, RevealData } from "../types";
 
 /**
- * Generate a cryptographic commitment for a move.
+ * Generate a cryptographic commitment for a move using RPO256.
  *
- * Uses 16-bit hash chunks. The raw hash parts (part1/part2) are carried
- * in a NoteAttachment — no amount-based encoding or offsets needed.
+ * Returns the commitment data including the 4-Felt RPO hash word
+ * that matches what the arena contract will verify.
  */
-export async function createCommitment(move: number): Promise<{
-  move: number;
-  nonce: Uint8Array;
-  part1: bigint;
-  part2: bigint;
-}> {
-  if (move < 1 || move > 20) {
-    throw new Error(`Move must be 1-20, got ${move}`);
+export function createCommitment(move: number): CommitData {
+  if (move < 1 || move > 16) {
+    throw new Error(`Move must be 1-16, got ${move}`);
   }
 
-  // Generate 32-bit random nonce (4 bytes)
-  const nonce = crypto.getRandomValues(new Uint8Array(4));
+  const noncePart1 = randomFelt();
+  const noncePart2 = randomFelt();
 
-  // Hash: SHA-256(move || nonce)
-  const data = new Uint8Array([move, ...nonce]);
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  const hash = new Uint8Array(hashBuffer);
+  // Must match contract: hash_elements(vec![encoded_move, nonce_p1, nonce_p2])
+  const felts = new FeltArray([
+    new Felt(BigInt(move)),
+    new Felt(noncePart1),
+    new Felt(noncePart2),
+  ]);
+  const digest = Rpo256.hashElements(felts);
+  const u64s = digest.toU64s();
+  const commitWord = [u64s[0], u64s[1], u64s[2], u64s[3]];
 
-  // Split first 32 bits into 2 × 16-bit values, add 1 to avoid 0 values
-  const part1 = bytesToBigInt(hash.slice(0, 2)) + 1n; // max 65536
-  const part2 = bytesToBigInt(hash.slice(2, 4)) + 1n; // max 65536
-
-  return { move, nonce, part1, part2 };
+  return { move, noncePart1, noncePart2, commitWord };
 }
 
 /**
  * Create reveal data from a commitment.
- * Splits the 4-byte nonce into 2 × 2-byte (16-bit) raw values.
- * No offset is applied — data is carried in a NoteAttachment.
  */
-export function createReveal(
-  move: number,
-  nonce: Uint8Array,
-): { move: number; noncePart1: bigint; noncePart2: bigint } {
-  const noncePart1 = bytesToBigInt(nonce.slice(0, 2));
-  const noncePart2 = bytesToBigInt(nonce.slice(2, 4));
-  return { move, noncePart1, noncePart2 };
+export function createReveal(commitData: CommitData): RevealData {
+  return {
+    move: commitData.move,
+    noncePart1: commitData.noncePart1,
+    noncePart2: commitData.noncePart2,
+  };
 }
 
 /**
- * Verify that a reveal matches a commitment.
- * All values are raw (no offsets).
+ * Debug-only: verify a reveal matches a commitment locally.
+ * Not on the critical path — the arena contract handles authoritative verification.
+ * Logs a warning on mismatch.
  */
-export async function verifyReveal(
+export function debugVerifyReveal(
   move: number,
   noncePart1: bigint,
   noncePart2: bigint,
-  committedPart1: bigint,
-  committedPart2: bigint,
-): Promise<boolean> {
-  // Note arrival order is non-deterministic, so try both nonce orderings.
-  // For each nonce ordering, also try both commit part orderings.
-  const nonceOrderings: [bigint, bigint][] = [
-    [noncePart1, noncePart2],
-    [noncePart2, noncePart1],
-  ];
+  commitWord: bigint[],
+): boolean {
+  try {
+    const felts = new FeltArray([
+      new Felt(BigInt(move)),
+      new Felt(noncePart1),
+      new Felt(noncePart2),
+    ]);
+    const digest = Rpo256.hashElements(felts);
+    const u64s = digest.toU64s();
+    const match =
+      u64s[0] === commitWord[0] &&
+      u64s[1] === commitWord[1] &&
+      u64s[2] === commitWord[2] &&
+      u64s[3] === commitWord[3];
 
-  for (const [np1, np2] of nonceOrderings) {
-    const nonceBytes1 = bigIntToBytes(np1, 2);
-    const nonceBytes2 = bigIntToBytes(np2, 2);
-    const nonce = concatBytes(nonceBytes1, nonceBytes2);
-
-    const data = new Uint8Array([move, ...nonce]);
-    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-    const hash = new Uint8Array(hashBuffer);
-
-    const ep1 = bytesToBigInt(hash.slice(0, 2)) + 1n;
-    const ep2 = bytesToBigInt(hash.slice(2, 4)) + 1n;
-
-    if (
-      (ep1 === committedPart1 && ep2 === committedPart2) ||
-      (ep1 === committedPart2 && ep2 === committedPart1)
-    ) {
-      return true;
+    if (!match) {
+      console.warn("[debugVerifyReveal] RPO hash mismatch", {
+        move,
+        noncePart1: noncePart1.toString(),
+        noncePart2: noncePart2.toString(),
+        expected: commitWord.map(String),
+        computed: [u64s[0], u64s[1], u64s[2], u64s[3]].map(String),
+      });
     }
+    return match;
+  } catch (err) {
+    console.warn("[debugVerifyReveal] verification error", err);
+    return false;
   }
-
-  return false;
 }

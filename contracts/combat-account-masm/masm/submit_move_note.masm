@@ -1,0 +1,111 @@
+# =============================================================================
+# Submit Move Note Script
+# =============================================================================
+#
+# Delivers a player's commit or reveal to the combat account.
+# Note inputs (1 felt): [phase] where phase=0 is commit, phase=1 is reveal.
+#
+# Commit: args = [commit_a, commit_b, commit_c, commit_d]
+#   submit_commit stack: [commit_d, commit_c, commit_b, commit_a, player_sfx, player_pfx, pad(10)]
+#
+# Reveal: args = [encoded_move, nonce_p1, nonce_p2, 0]
+#   submit_reveal stack: [nonce_p2, nonce_p1, encoded_move, player_sfx, player_pfx, pad(11)]
+#
+# Entry stack: [arg3, arg2, arg1, arg0, pad(12)]
+
+use miden::protocol::active_note
+
+const ERR_INVALID_PHASE = "invalid phase: expected 0 (commit) or 1 (reveal)"
+
+begin
+    # Entry: [arg3, arg2, arg1, arg0, pad(12)]
+    # For commit: arg = [commit_a, commit_b, commit_c, commit_d]
+    #   Stack: [commit_d, commit_c, commit_b, commit_a, pad(12)]
+    # For reveal: arg = [encoded_move, nonce_p1, nonce_p2, 0]
+    #   Stack: [0, nonce_p2, nonce_p1, encoded_move, pad(12)]
+
+    # --- Get note inputs (phase) to memory at addr 2000 ---
+    push.2000 exec.active_note::get_inputs
+    # => [num_inputs, 2000, arg3, arg2, arg1, arg0, pad(12)]
+
+    eq.1 assert
+    # => [2000, arg3, arg2, arg1, arg0, pad(12)]
+
+    drop
+    # => [arg3, arg2, arg1, arg0, pad(12)]
+
+    # --- Get sender (player account ID) ---
+    exec.active_note::get_sender
+    # => [sender_pfx, sender_sfx, arg3, arg2, arg1, arg0, pad(12)]
+
+    # --- Read phase from memory ---
+    # Phase = input[0], stored at memory word 2000.
+    # mem_loadw_be gives [phase, 0, 0, 0] for 1 input (3 zeros are word padding).
+    # MLoadW's shift_left(5) consumes the address + all padw scratch, no stray zeros.
+    padw push.2000 mem_loadw_be
+    # => [phase, 0, 0, 0, sender_pfx, sender_sfx, arg3, arg2, arg1, arg0, pad(12)]
+
+    # Keep only phase, drop the 3 word-padding zeros
+    swap drop swap drop swap drop
+    # => [phase, sender_pfx, sender_sfx, arg3, arg2, arg1, arg0, pad(12)]
+
+    # --- Validate and branch on phase ---
+    dup push.2 u32lt assert.err=ERR_INVALID_PHASE
+    # phase is 0 or 1
+
+    if.true
+        # === Phase 1: Reveal ===
+        # sender = [sender_pfx, sender_sfx]
+        # args on stack: [sender_pfx, sender_sfx, 0, nonce_p2, nonce_p1, encoded_move, pad(12)]
+        #
+        # submit_reveal expects:
+        #   [nonce_p2, nonce_p1, encoded_move, player_sfx, player_pfx, pad(11)]
+        #
+        # Need to: swap sender pair, drop arg3 (the 0), rearrange
+
+        # Swap sender prefix/suffix for the call convention
+        swap
+        # => [sender_sfx, sender_pfx, 0, nonce_p2, nonce_p1, encoded_move, pad(12)]
+
+        # Move sender pair below the args: we need args on top, sender below
+        movdn.5 movdn.5
+        # => [0, nonce_p2, nonce_p1, encoded_move, sender_sfx, sender_pfx, pad(12)]
+
+        # Drop the unused arg3 (=0 for reveal)
+        drop
+        # => [nonce_p2, nonce_p1, encoded_move, sender_sfx, sender_pfx, pad(12)]
+
+        # Stack matches submit_reveal:
+        #   [nonce_p2, nonce_p1, encoded_move, player_sfx, player_pfx, pad(11)]
+        call.::nofile::submit_reveal
+        # => [ret(16)]
+
+        dropw dropw dropw dropw
+        # => []
+    else
+        # === Phase 0: Commit ===
+        # sender = [sender_pfx, sender_sfx]
+        # args on stack: [sender_pfx, sender_sfx, commit_d, commit_c, commit_b, commit_a, pad(12)]
+        #
+        # submit_commit expects:
+        #   [commit_d, commit_c, commit_b, commit_a, player_sfx, player_pfx, pad(10)]
+        #
+        # Need to: swap sender pair, move sender below args
+
+        # Swap sender prefix/suffix for the call convention
+        swap
+        # => [sender_sfx, sender_pfx, commit_d, commit_c, commit_b, commit_a, pad(12)]
+
+        # Move sender pair below the 4 commit args
+        movdn.5 movdn.5
+        # => [commit_d, commit_c, commit_b, commit_a, sender_sfx, sender_pfx, pad(12)]
+
+        # Stack matches submit_commit:
+        #   [commit_d, commit_c, commit_b, commit_a, player_sfx, player_pfx, pad(10)]
+        call.::nofile::submit_commit
+        # => [ret(16)]
+
+        dropw dropw dropw dropw
+        # => []
+    end
+end

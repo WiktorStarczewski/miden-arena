@@ -2,10 +2,10 @@ import { describe, it, expect } from "vitest";
 import { getInitialPool, getCurrentPicker, isDraftComplete, removeFromPool, isValidPick } from "../draft";
 
 describe("getInitialPool", () => {
-  it("returns all 10 champion IDs", () => {
+  it("returns all 8 champion IDs", () => {
     const pool = getInitialPool();
-    expect(pool).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
-    expect(pool).toHaveLength(10);
+    expect(pool).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+    expect(pool).toHaveLength(8);
   });
 });
 

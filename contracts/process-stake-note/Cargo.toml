@@ -1,0 +1,22 @@
+[package]
+name = "process-stake-note"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+miden = { version = "0.10" }
+
+[package.metadata.component]
+package = "miden:process-stake-note"
+
+[package.metadata.miden]
+project-kind = "note-script"
+
+[package.metadata.miden.dependencies]
+"miden:matchmaking-account" = { path = "../matchmaking-account" }
+
+[package.metadata.component.target.dependencies]
+"miden:matchmaking-account" = { path = "../matchmaking-account/wit/miden-matchmaking-account.wit" }

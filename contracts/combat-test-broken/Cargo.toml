@@ -1,0 +1,11 @@
+[package]
+name = "combat_test_broken"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+miden = { version = "0.10" }
+combat-engine = { path = "../../crates/combat-engine" }

@@ -64,14 +64,11 @@ function FighterPanel({
       />
 
       {/* Status effects */}
-      {(championState.buffs.length > 0 || championState.burnTurns > 0) && (
+      {championState.buffs.length > 0 && (
         <div className="flex flex-wrap gap-1 mt-2">
           {championState.buffs.map((buff, i) => (
             <StatusEffectIcon key={`buff-${i}`} buff={buff} />
           ))}
-          {championState.burnTurns > 0 && (
-            <StatusEffectIcon isBurn burnTurns={championState.burnTurns} />
-          )}
         </div>
       )}
     </GlassPanel>
@@ -132,8 +129,8 @@ export default function BattleHUD({ onSubmitMove, children }: BattleHUDProps) {
         )}
       </div>
 
-      {/* Phase indicator — hidden on mobile to save space */}
-      <div className="hidden sm:block flex-shrink-0 px-4 my-2">
+      {/* Phase indicator */}
+      <div className="flex-shrink-0 px-1 sm:px-4 my-1 sm:my-2">
         <TurnPhaseIndicator phase={phase} />
       </div>
 

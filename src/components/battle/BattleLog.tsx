@@ -13,7 +13,6 @@ function getEventColor(event: TurnEvent): string {
   const text = typeof event === "string" ? event : event.type ?? "";
   if (text.includes("damage") || text.includes("attack")) return "text-red-400";
   if (text.includes("heal")) return "text-emerald-400";
-  if (text.includes("burn")) return "text-orange-400";
   if (text.includes("buff")) return "text-sky-400";
   if (text.includes("debuff")) return "text-purple-400";
   if (text.includes("ko") || text.includes("KO")) return "text-red-500";
@@ -34,10 +33,6 @@ function formatEvent(event: TurnEvent): string {
       return `${getChampion(event.championId).name} gained +${event.value} ${event.stat} (${event.duration}t)`;
     case "debuff":
       return `${getChampion(event.targetId).name} got -${event.value} ${event.stat} (${event.duration}t)`;
-    case "burn_tick":
-      return `${getChampion(event.championId).name} took ${event.damage} burn damage`;
-    case "burn_applied":
-      return `${getChampion(event.targetId).name} is burning (${event.duration}t)`;
     case "ko":
       return `${getChampion(event.championId).name} was KO'd!`;
     default:

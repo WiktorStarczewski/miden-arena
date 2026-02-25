@@ -1,0 +1,6 @@
+package miden:process-result-note@0.1.0;
+
+world process-result-note-world {
+    import miden:matchmaking-account/matchmaking-account@0.1.0;
+    export miden:base/note-script@1.0.0;
+}

@@ -1,0 +1,1898 @@
+# =============================================================================
+# Combat Account — Native MASM Implementation
+# =============================================================================
+
+use miden::protocol::native_account
+use miden::protocol::active_account
+use miden::protocol::output_note
+use miden::protocol::tx
+
+# ---------------------------------------------------------------------------
+# Storage slot constants
+# ---------------------------------------------------------------------------
+
+const COMBAT_STATE = word("combat::combat_state")
+const PLAYER_A = word("combat::player_a")
+const PLAYER_B = word("combat::player_b")
+const TEAM_A = word("combat::team_a")
+const TEAM_B = word("combat::team_b")
+const ROUND = word("combat::round")
+const MOVE_A_COMMIT = word("combat::move_a_commit")
+const MOVE_B_COMMIT = word("combat::move_b_commit")
+const MOVE_A_REVEAL = word("combat::move_a_reveal")
+const MOVE_B_REVEAL = word("combat::move_b_reveal")
+const CHAMP_A_0 = word("combat::champ_a_0")
+const CHAMP_A_1 = word("combat::champ_a_1")
+const CHAMP_A_2 = word("combat::champ_a_2")
+const CHAMP_B_0 = word("combat::champ_b_0")
+const CHAMP_B_1 = word("combat::champ_b_1")
+const CHAMP_B_2 = word("combat::champ_b_2")
+const TIMEOUT_HEIGHT = word("combat::timeout_height")
+const MATCHMAKING_ID = word("combat::matchmaking_id")
+const RESULT_SCRIPT_HASH = word("combat::result_script_hash")
+const FAUCET_ID = word("combat::faucet_id")
+
+const ERR_ALREADY_INIT = "combat already initialized"
+const ERR_INVALID_CHAMP = "invalid champion ID"
+const ERR_DUP_TEAM_A = "duplicate champion in team A"
+const ERR_DUP_TEAM_B = "duplicate champion in team B"
+const ERR_OVERLAP = "champion overlap between teams"
+const ERR_NOT_ACTIVE = "combat not active"
+const ERR_NOT_PLAYER = "not a player in this game"
+const ERR_ALREADY_COMMITTED = "already committed this round"
+const ERR_NO_COMMIT = "must commit before revealing"
+const ERR_ALREADY_REVEALED = "already revealed this round"
+const ERR_HASH_MISMATCH = "commitment mismatch"
+const ERR_MOVE_RANGE = "move out of range"
+const ERR_NOT_ON_TEAM = "champion not on player's team"
+const ERR_CHAMP_KO = "cannot act with KO'd champion"
+const ERR_TIMEOUT_NOT_REACHED = "timeout not reached"
+
+# =============================================================================
+# Champion Data Lookups (IDs 0-7)
+# =============================================================================
+
+#! Stack: [id] -> [hp]
+proc get_hp
+    dup push.0 eq if.true drop push.80 else
+    dup push.1 eq if.true drop push.140 else
+    dup push.2 eq if.true drop push.90 else
+    dup push.3 eq if.true drop push.110 else
+    dup push.4 eq if.true drop push.75 else
+    dup push.5 eq if.true drop push.100 else
+    dup push.6 eq if.true drop push.130 else
+    dup push.7 eq if.true drop push.85 else
+    push.0 assert
+    end end end end end end end end
+end
+
+#! Stack: [id] -> [attack]
+proc get_attack
+    dup push.0 eq if.true drop push.20 else
+    dup push.1 eq if.true drop push.14 else
+    dup push.2 eq if.true drop push.16 else
+    dup push.3 eq if.true drop push.12 else
+    dup push.4 eq if.true drop push.15 else
+    dup push.5 eq if.true drop push.11 else
+    dup push.6 eq if.true drop push.13 else
+    dup push.7 eq if.true drop push.17 else
+    push.0 assert
+    end end end end end end end end
+end
+
+#! Stack: [id] -> [defense]
+proc get_defense
+    dup push.0 eq if.true drop push.5 else
+    dup push.1 eq if.true drop push.16 else
+    dup push.2 eq if.true drop push.8 else
+    dup push.3 eq if.true drop push.12 else
+    dup push.4 eq if.true drop push.6 else
+    dup push.5 eq if.true drop push.14 else
+    dup push.6 eq if.true drop push.15 else
+    dup push.7 eq if.true drop push.7 else
+    push.0 assert
+    end end end end end end end end
+end
+
+#! Stack: [id] -> [speed]
+proc get_speed
+    dup push.0 eq if.true drop push.16 else
+    dup push.1 eq if.true drop push.5 else
+    dup push.2 eq if.true drop push.14 else
+    dup push.3 eq if.true drop push.10 else
+    dup push.4 eq if.true drop push.18 else
+    dup push.5 eq if.true drop push.9 else
+    dup push.6 eq if.true drop push.7 else
+    dup push.7 eq if.true drop push.15 else
+    push.0 assert
+    end end end end end end end end
+end
+
+#! Stack: [id] -> [element]  Fire=0, Water=1, Earth=2, Wind=3
+proc get_element
+    dup push.0 eq if.true drop push.0 else
+    dup push.1 eq if.true drop push.2 else
+    dup push.2 eq if.true drop push.0 else
+    dup push.3 eq if.true drop push.1 else
+    dup push.4 eq if.true drop push.3 else
+    dup push.5 eq if.true drop push.1 else
+    dup push.6 eq if.true drop push.2 else
+    dup push.7 eq if.true drop push.3 else
+    push.0 assert
+    end end end end end end end end
+end
+
+# =============================================================================
+# Ability Data Lookups (16 entries: champion_id * 2 + ability_index)
+# =============================================================================
+
+#! Stack: [ab_idx] -> [power]
+proc get_ab_power
+    dup push.0 eq if.true drop push.35 else
+    dup push.1 eq if.true drop push.20 else
+    dup push.2 eq if.true drop push.28 else
+    dup push.3 eq if.true drop push.0 else
+    dup push.4 eq if.true drop push.25 else
+    dup push.5 eq if.true drop push.0 else
+    dup push.6 eq if.true drop push.22 else
+    dup push.7 eq if.true drop push.0 else
+    dup push.8 eq if.true drop push.24 else
+    dup push.9 eq if.true drop push.0 else
+    dup push.10 eq if.true drop push.20 else
+    dup push.11 eq if.true drop push.0 else
+    dup push.12 eq if.true drop push.26 else
+    dup push.13 eq if.true drop push.0 else
+    dup push.14 eq if.true drop push.30 else
+    dup push.15 eq if.true drop push.0 else
+    push.0 assert
+    end end end end end end end end
+    end end end end end end end end
+end
+
+#! Stack: [ab_idx] -> [ab_type]  0=Damage, 1=Heal, 2=StatMod
+proc get_ab_type
+    dup push.0 eq if.true drop push.0 else
+    dup push.1 eq if.true drop push.0 else
+    dup push.2 eq if.true drop push.0 else
+    dup push.3 eq if.true drop push.2 else
+    dup push.4 eq if.true drop push.0 else
+    dup push.5 eq if.true drop push.2 else
+    dup push.6 eq if.true drop push.0 else
+    dup push.7 eq if.true drop push.1 else
+    dup push.8 eq if.true drop push.0 else
+    dup push.9 eq if.true drop push.2 else
+    dup push.10 eq if.true drop push.0 else
+    dup push.11 eq if.true drop push.2 else
+    dup push.12 eq if.true drop push.0 else
+    dup push.13 eq if.true drop push.2 else
+    dup push.14 eq if.true drop push.0 else
+    dup push.15 eq if.true drop push.2 else
+    push.0 assert
+    end end end end end end end end
+    end end end end end end end end
+end
+
+#! Stack: [ab_idx] -> [stat]  0=Defense, 1=Speed, 2=Attack
+proc get_ab_stat
+    dup push.0 eq if.true drop push.0 else
+    dup push.1 eq if.true drop push.0 else
+    dup push.2 eq if.true drop push.0 else
+    dup push.3 eq if.true drop push.0 else
+    dup push.4 eq if.true drop push.0 else
+    dup push.5 eq if.true drop push.0 else
+    dup push.6 eq if.true drop push.0 else
+    dup push.7 eq if.true drop push.0 else
+    dup push.8 eq if.true drop push.0 else
+    dup push.9 eq if.true drop push.1 else
+    dup push.10 eq if.true drop push.0 else
+    dup push.11 eq if.true drop push.2 else
+    dup push.12 eq if.true drop push.0 else
+    dup push.13 eq if.true drop push.0 else
+    dup push.14 eq if.true drop push.0 else
+    dup push.15 eq if.true drop push.1 else
+    push.0 assert
+    end end end end end end end end
+    end end end end end end end end
+end
+
+#! Stack: [ab_idx] -> [stat_val]
+proc get_ab_stat_val
+    dup push.0 eq if.true drop push.0 else
+    dup push.1 eq if.true drop push.0 else
+    dup push.2 eq if.true drop push.0 else
+    dup push.3 eq if.true drop push.6 else
+    dup push.4 eq if.true drop push.0 else
+    dup push.5 eq if.true drop push.5 else
+    dup push.6 eq if.true drop push.0 else
+    dup push.7 eq if.true drop push.0 else
+    dup push.8 eq if.true drop push.0 else
+    dup push.9 eq if.true drop push.5 else
+    dup push.10 eq if.true drop push.0 else
+    dup push.11 eq if.true drop push.4 else
+    dup push.12 eq if.true drop push.0 else
+    dup push.13 eq if.true drop push.8 else
+    dup push.14 eq if.true drop push.0 else
+    dup push.15 eq if.true drop push.6 else
+    push.0 assert
+    end end end end end end end end
+    end end end end end end end end
+end
+
+#! Stack: [ab_idx] -> [duration]
+proc get_ab_duration
+    dup push.0 eq if.true drop push.0 else
+    dup push.1 eq if.true drop push.0 else
+    dup push.2 eq if.true drop push.0 else
+    dup push.3 eq if.true drop push.2 else
+    dup push.4 eq if.true drop push.0 else
+    dup push.5 eq if.true drop push.2 else
+    dup push.6 eq if.true drop push.0 else
+    dup push.7 eq if.true drop push.0 else
+    dup push.8 eq if.true drop push.0 else
+    dup push.9 eq if.true drop push.2 else
+    dup push.10 eq if.true drop push.0 else
+    dup push.11 eq if.true drop push.2 else
+    dup push.12 eq if.true drop push.0 else
+    dup push.13 eq if.true drop push.1 else
+    dup push.14 eq if.true drop push.0 else
+    dup push.15 eq if.true drop push.2 else
+    push.0 assert
+    end end end end end end end end
+    end end end end end end end end
+end
+
+#! Stack: [ab_idx] -> [heal_amount]
+proc get_ab_heal
+    dup push.7 eq
+    if.true
+        drop push.25
+    else
+        drop push.0
+    end
+end
+
+#! Stack: [ab_idx] -> [is_debuff]  0 or 1
+proc get_ab_is_debuff
+    push.11 eq
+end
+
+# =============================================================================
+# Utility Procedures
+# =============================================================================
+
+#! Decode encoded_move (1-16) into champion_id and ability_index.
+#! Stack: [encoded_move] -> [ability_index, champion_id]
+proc decode_move
+    push.1 u32wrapping_sub
+    # Stack: [val]
+    # u32div: [b, a, ...] -> [a/b, a%b, ...]
+    # We need [val, 2] on stack (a=val, b=2) -> but b is on top
+    # So push 2, then we have [2, val] -> u32div gives [val/2, val%2]
+    push.2 swap u32div
+    # Stack: [val/2, val%2] = [champion_id, ability_index]
+    swap
+    # Stack: [ability_index, champion_id]
+end
+
+#! Get element advantage multiplier x100.
+#! Stack: [defender_element, attacker_element] -> [multiplier]
+proc get_type_multiplier
+    dup.1 dup.1 eq
+    if.true
+        drop drop push.100
+    else
+        # Compute what attacker beats: Fire->Earth, Water->Fire, Earth->Wind, Wind->Water
+        dup.1
+        dup push.0 eq if.true drop push.2 else
+        dup push.1 eq if.true drop push.0 else
+        dup push.2 eq if.true drop push.3 else
+        dup push.3 eq if.true drop push.1 else
+        drop push.99
+        end end end end
+        # Stack: [atk_beats, def_elem, atk_elem]
+        dup.1 eq
+        if.true
+            drop drop push.150
+        else
+            # Check reverse: what defender beats
+            dup
+            dup push.0 eq if.true drop push.2 else
+            dup push.1 eq if.true drop push.0 else
+            dup push.2 eq if.true drop push.3 else
+            dup push.3 eq if.true drop push.1 else
+            drop push.99
+            end end end end
+            # Stack: [def_beats, def_elem, atk_elem]
+            movdn.2 drop
+            # Stack: [atk_elem, def_beats]
+            eq
+            if.true
+                push.67
+            else
+                push.100
+            end
+        end
+    end
+end
+
+#! Sum active buff values for matching stat type (non-debuff only).
+#! Extracts and checks each of 4 packed 16-bit buff slots.
+#! Stack: [stat_type, buff_felt] -> [total]
+proc sum_buffs
+    push.0  # accumulator
+    # Stack: [total, stat_type, buff_felt]
+
+    # Process all 4 buff slots from buff_felt
+    # buff_felt has buff[0] in bits 63-48, buff[1] in 47-32, buff[2] in 31-16, buff[3] in 15-0
+
+    # Split into hi32 (buff[0..1]) and lo32 (buff[2..3])
+    dup.2 u32split
+    # Stack: [hi32, lo32, total, stat_type, buff_felt]
+
+    # --- Buff slot 0 (upper 16 of hi32) ---
+    dup push.65536 u32div drop
+    # Stack: [buff0, hi32, lo32, total, stat_type, buff_felt]
+    dup push.4 u32div drop push.1 u32and
+    # Stack: [active0, buff0, hi32, lo32, total, stat_type, buff_felt]
+    if.true
+        # Check not debuff: bit 13
+        dup push.8192 u32div drop push.1 u32and
+        if.true
+            drop  # is debuff, skip
+        else
+            # Check stat match: bits 15-14
+            dup push.16384 u32div drop
+            dup.5 eq
+            if.true
+                # Extract value: bits 12-7
+                push.128 u32div drop push.63 u32and
+                # Stack: [value, hi32, lo32, total, stat_type, buff_felt]
+                movdn.3 dup.3 u32wrapping_add movdn.3
+                # Added value to total
+            else
+                drop
+            end
+        end
+    else
+        drop
+    end
+
+    # --- Buff slot 1 (lower 16 of hi32) ---
+    # Stack: [hi32, lo32, total, stat_type, buff_felt]
+    push.65535 u32and
+    # Stack: [buff1, lo32, total, stat_type, buff_felt]
+    dup push.4 u32div drop push.1 u32and
+    if.true
+        dup push.8192 u32div drop push.1 u32and
+        if.true
+            drop
+        else
+            dup push.16384 u32div drop
+            dup.4 eq
+            if.true
+                push.128 u32div drop push.63 u32and
+                movdn.2 dup.2 u32wrapping_add movdn.2
+            else
+                drop
+            end
+        end
+    else
+        drop
+    end
+
+    # --- Buff slot 2 (upper 16 of lo32) ---
+    # Stack: [lo32, total, stat_type, buff_felt]
+    dup push.65536 u32div drop
+    # Stack: [buff2, lo32, total, stat_type, buff_felt]
+    dup push.4 u32div drop push.1 u32and
+    if.true
+        dup push.8192 u32div drop push.1 u32and
+        if.true
+            drop
+        else
+            dup push.16384 u32div drop
+            dup.4 eq
+            if.true
+                push.128 u32div drop push.63 u32and
+                movdn.2 dup.2 u32wrapping_add movdn.2
+            else
+                drop
+            end
+        end
+    else
+        drop
+    end
+
+    # --- Buff slot 3 (lower 16 of lo32) ---
+    # Stack: [lo32, total, stat_type, buff_felt]
+    push.65535 u32and
+    dup push.4 u32div drop push.1 u32and
+    if.true
+        dup push.8192 u32div drop push.1 u32and
+        if.true
+            drop
+        else
+            dup push.16384 u32div drop
+            dup.3 eq
+            if.true
+                push.128 u32div drop push.63 u32and
+                swap u32wrapping_add
+                # Stack: [total, stat_type, buff_felt]
+                swap drop swap drop
+                # Stack: [total]
+            else
+                drop
+                swap drop swap drop
+            end
+        end
+    else
+        drop
+        # Stack: [total, stat_type, buff_felt]
+        swap drop swap drop
+    end
+end
+
+#! Sum active debuff values for matching stat type (debuff only).
+#! Stack: [stat_type, buff_felt] -> [total]
+proc sum_debuffs
+    push.0
+    dup.2 u32split
+
+    # --- Buff slot 0 ---
+    dup push.65536 u32div drop
+    dup push.4 u32div drop push.1 u32and
+    if.true
+        dup push.8192 u32div drop push.1 u32and
+        if.true
+            # IS debuff - check stat match
+            dup push.16384 u32div drop
+            dup.5 eq
+            if.true
+                push.128 u32div drop push.63 u32and
+                movdn.3 dup.3 u32wrapping_add movdn.3
+            else
+                drop
+            end
+        else
+            drop  # not debuff
+        end
+    else
+        drop
+    end
+
+    # --- Buff slot 1 ---
+    push.65535 u32and
+    dup push.4 u32div drop push.1 u32and
+    if.true
+        dup push.8192 u32div drop push.1 u32and
+        if.true
+            dup push.16384 u32div drop
+            dup.4 eq
+            if.true
+                push.128 u32div drop push.63 u32and
+                movdn.2 dup.2 u32wrapping_add movdn.2
+            else
+                drop
+            end
+        else
+            drop
+        end
+    else
+        drop
+    end
+
+    # --- Buff slot 2 ---
+    dup push.65536 u32div drop
+    dup push.4 u32div drop push.1 u32and
+    if.true
+        dup push.8192 u32div drop push.1 u32and
+        if.true
+            dup push.16384 u32div drop
+            dup.4 eq
+            if.true
+                push.128 u32div drop push.63 u32and
+                movdn.2 dup.2 u32wrapping_add movdn.2
+            else
+                drop
+            end
+        else
+            drop
+        end
+    else
+        drop
+    end
+
+    # --- Buff slot 3 ---
+    push.65535 u32and
+    dup push.4 u32div drop push.1 u32and
+    if.true
+        dup push.8192 u32div drop push.1 u32and
+        if.true
+            dup push.16384 u32div drop
+            dup.3 eq
+            if.true
+                push.128 u32div drop push.63 u32and
+                swap u32wrapping_add
+                swap drop swap drop
+            else
+                drop
+                swap drop swap drop
+            end
+        else
+            drop
+            swap drop swap drop
+        end
+    else
+        drop
+        swap drop swap drop
+    end
+end
+
+# =============================================================================
+# Internal: send_result_note
+# =============================================================================
+
+#! Create an output note with the combat result.
+#! Stack: [winner_val, ...] -> [...]
+proc send_result_note
+    # Build recipient = hmerge(hmerge(hmerge(serial, [0;4]), script_hash), inputs_commit)
+    # serial = [3_000_000 + winner_val, 0, 0, 0]
+    # inputs_commit = RPO_hash([winner_val])
+
+    # 1. Compute inputs_commit = RPO_hash([winner_val])
+    dup  # save winner_val
+    push.0 push.0 push.0  # [0, 0, 0, winner_val]
+    # hperm state: [C, B, A] = [data, zeros, zeros]
+    padw padw
+    # Stack: [A(0,0,0,0), B(0,0,0,0), C(0,0,0,winner_val), winner_val, ...]
+    swapw.2
+    # Stack: [C, B, A, winner_val, ...]
+    hperm
+    # Stack: [C', B', A', winner_val, ...]
+    dropw swapw dropw
+    # Stack: [inputs_commit(4), winner_val, ...]
+
+    # 2. Compute serial word
+    movup.4
+    # Stack: [winner_val, ic0, ic1, ic2, ic3, ...]
+    push.3000000 u32wrapping_add
+    # Stack: [serial0, ic0, ic1, ic2, ic3, ...]
+
+    # 3. hmerge(serial, [0;4]) - hash_serial
+    # serial = [serial0, 0, 0, 0], second word = [0, 0, 0, 0]
+    push.0 push.0 push.0
+    # Stack: [0, 0, 0, serial0, ic0, ic1, ic2, ic3, ...]
+    # For hmerge: [word2(4), word1(4), capacity(4)]
+    # word1 = serial = [serial0, 0, 0, 0] -> on stack: [0, 0, 0, serial0]
+    # word2 = [0, 0, 0, 0]
+    padw  # word2 = zeros
+    # Stack: [0,0,0,0, 0,0,0,serial0, ic0,ic1,ic2,ic3, ...]
+    # Need: [C=word2, B=word1, A=capacity(zeros)]
+    # Currently have [word2, word1] but need capacity below
+    # Actually for hmerge: [C, B, A] where A is capacity
+    # C = second input word, B = first input word, A = [0,0,0,0]
+    padw
+    # Stack: [A(0,0,0,0), C(0,0,0,0), B(0,0,0,serial0), ic0, ...]
+    # Need to reorder to [C, B, A]
+    swapw swapw.2
+    # Stack: [C, B, A, ic, ...]
+    hperm
+    dropw swapw dropw
+    # Stack: [hash_serial(4), ic0, ic1, ic2, ic3, ...]
+
+    # 4. hmerge(hash_serial, script_hash)
+    push.RESULT_SCRIPT_HASH[0..2] exec.active_account::get_item
+    # Stack: [sh0, sh1, sh2, sh3, hs0, hs1, hs2, hs3, ic0, ic1, ic2, ic3, ...]
+    # hmerge([hash_serial, script_hash]) -> [C=script_hash, B=hash_serial, A=zeros]
+    swapw
+    # Stack: [hs0, hs1, hs2, hs3, sh0, sh1, sh2, sh3, ic, ...]
+    padw swapw swapw.2
+    hperm
+    dropw swapw dropw
+    # Stack: [hash_script(4), ic0, ic1, ic2, ic3, ...]
+
+    # 5. hmerge(hash_script, inputs_commit) = recipient
+    swapw
+    # Stack: [ic(4), hs(4), ...]
+    padw swapw swapw.2
+    hperm
+    dropw swapw dropw
+    # Stack: [recipient(4), ...]
+
+    # 6. Create output note: tag=0, note_type=1 (public)
+    # output_note::create expects [tag, note_type, RECIPIENT]
+    # Actually let's check the calling convention...
+    # The Miden kernel's create_note expects specific stack layout
+    push.0  # aux
+    push.1  # note_type (public)
+    push.0  # tag
+    # Stack: [tag, note_type, aux, r0, r1, r2, r3, ...]
+    exec.output_note::create
+    # Returns note_idx on stack
+    # Stack: [note_idx, ...]
+
+    # 7. Add dust asset from faucet
+    push.FAUCET_ID[0..2] exec.active_account::get_item
+    # Stack: [faucet_pfx, faucet_sfx, 0, 0, note_idx, ...]
+    # Build fungible asset: [faucet_pfx, amount=1, 0, faucet_sfx] - actually need to check asset format
+    # Fungible asset word: [faucet_id_prefix, amount, 0, faucet_id_suffix]
+    # But this needs the correct format. Let me use the proper layout.
+    # A fungible asset is [FAUCET_ID_PREFIX, AMOUNT, 0, FAUCET_ID_SUFFIX]
+    drop drop
+    # Stack: [faucet_pfx, faucet_sfx, note_idx, ...]
+    swap push.1 push.0
+    # Stack: [0, 1, faucet_pfx, faucet_sfx, note_idx, ...]
+    movup.3
+    # Stack: [faucet_sfx, 0, 1, faucet_pfx, note_idx, ...]
+    movup.4
+    # Stack: [note_idx, faucet_sfx, 0, 1, faucet_pfx, ...]
+    movdn.4
+    # Stack: [faucet_sfx, 0, 1, faucet_pfx, note_idx, ...]
+    # Need: [ASSET_WORD, note_idx] where asset = [faucet_pfx, 1, 0, faucet_sfx]
+    # Rearrange: currently [faucet_sfx, 0, 1, faucet_pfx, note_idx]
+    # Want: [faucet_sfx, 0, 1, faucet_pfx, note_idx]  -> wrong order still
+    # Asset word from top: [a3, a2, a1, a0] where a0=faucet_pfx, a1=amount, a2=0, a3=faucet_sfx
+    # So on stack top-first: [faucet_sfx, 0, 1, faucet_pfx]
+    # That's what we have! Good.
+    exec.output_note::add_asset
+    dropw  # drop returned asset
+end
+
+# =============================================================================
+# Combat Action Procedures
+# =============================================================================
+
+#! Apply damage from attacker to target.
+#! Input:  [ab_idx, actor_id, target_id, actor_buffs, target_buffs, target_hp]
+#! Output: [target_hp', target_is_ko]
+proc apply_damage
+    # 1. power
+    dup exec.get_ab_power
+    # [power, ab_idx, actor_id, target_id, actor_buffs, target_buffs, target_hp]
+
+    # 2. effective_atk = base_attack - attack_debuffs
+    dup.2 exec.get_attack
+    # [base_atk, power, ab_idx, actor_id, target_id, actor_buffs, target_buffs, target_hp]
+
+    dup.5 push.2 exec.sum_debuffs
+    # [debuffs, base_atk, power, ab_idx, actor_id, target_id, actor_buffs, target_buffs, target_hp]
+    dup.1 dup.1 u32lt
+    if.true
+        drop drop push.0
+    else
+        u32wrapping_sub
+    end
+    # [eff_atk, power, ab_idx, actor_id, target_id, actor_buffs, target_buffs, target_hp]
+
+    # 3. type multiplier
+    dup.3 exec.get_element
+    dup.5 exec.get_element
+    exec.get_type_multiplier
+    # [mult, eff_atk, power, ab_idx, actor_id, target_id, actor_buffs, target_buffs, target_hp]
+
+    # 4. effective_def = base_defense + defense_buffs
+    dup.5 exec.get_defense
+    # [base_def, mult, eff_atk, power, ab_idx, actor_id, target_id, actor_buffs, target_buffs, target_hp]
+    dup.8 push.0 exec.sum_buffs
+    # [def_buffs, base_def, mult, eff_atk, power, ...]
+    u32wrapping_add
+    # [eff_def, mult, eff_atk, power, ab_idx, actor_id, target_id, actor_buffs, target_buffs, target_hp]
+
+    # 5. raw = power * (20 + eff_atk) * mult / 2000
+    movup.2 push.20 u32wrapping_add
+    # [20+eff_atk, eff_def, mult, power, ...]
+    movup.3 u32wrapping_mul
+    # [power*(20+eff_atk), eff_def, mult, ...]
+    movup.2 u32wrapping_mul
+    # [numerator, eff_def, ab_idx, actor_id, target_id, actor_buffs, target_buffs, target_hp]
+    push.2000 u32div drop
+    # [raw, eff_def, ab_idx, actor_id, target_id, actor_buffs, target_buffs, target_hp]
+
+    # 6. dmg = max(raw - eff_def, 1)
+    dup.1 dup.1 u32gt
+    if.true
+        drop drop push.1
+    else
+        swap u32wrapping_sub
+    end
+    # [dmg, ab_idx, actor_id, target_id, actor_buffs, target_buffs, target_hp]
+
+    # 7. Apply damage to target_hp (saturating)
+    movup.6
+    # [target_hp, dmg, ab_idx, actor_id, target_id, actor_buffs, target_buffs]
+    dup.1 dup.1 u32lt
+    if.true
+        drop drop push.0
+    else
+        swap u32wrapping_sub
+    end
+    # [target_hp', ab_idx, actor_id, target_id, actor_buffs, target_buffs]
+
+    dup push.0 eq
+    # [is_ko, target_hp', ab_idx, actor_id, target_id, actor_buffs, target_buffs]
+
+    # Clean up: keep only target_hp' and is_ko
+    movup.6 drop movup.5 drop movup.4 drop movup.3 drop movup.2 drop
+    # [is_ko, target_hp']
+    swap
+    # [target_hp', is_ko]
+end
+
+#! Apply heal to actor.
+#! Input:  [ab_idx, actor_hp, actor_max_hp]
+#! Output: [actor_hp']
+proc apply_heal
+    exec.get_ab_heal
+    # [heal_amount, actor_hp, actor_max_hp]
+    dup.1 u32wrapping_add
+    # [new_hp, actor_hp, actor_max_hp]
+    swap drop
+    # [new_hp, actor_max_hp]
+    # Cap at max_hp: min(new_hp, max_hp)
+    # u32lt pops [b, a] and pushes (a < b) i.e. is second-on-stack < top-of-stack
+    # We want: if new_hp > max_hp then max_hp else new_hp
+    dup.1 dup.1
+    # [new_hp, max_hp, new_hp, max_hp]
+    u32lt
+    # [max_hp < new_hp, new_hp, max_hp]
+    if.true
+        drop  # new_hp > max_hp, keep max_hp
+    else
+        swap drop  # new_hp <= max_hp, keep new_hp
+    end
+end
+
+#! Apply stat modification (buff or debuff).
+#! For buff: pass actor_buffs. For debuff: pass target_buffs.
+#! Input:  [ab_idx, buff_felt]
+#! Output: [buff_felt']
+proc apply_stat_mod
+    # Get stat, value, duration, is_debuff
+    dup exec.get_ab_stat_val
+    # [stat_val, ab_idx, buff_felt]
+    dup.1 exec.get_ab_duration
+    # [duration, stat_val, ab_idx, buff_felt]
+
+    # If stat_val == 0 or duration == 0, no-op
+    dup push.0 eq
+    if.true
+        drop drop drop
+        # [buff_felt]
+    else
+        dup.1 push.0 eq
+        if.true
+            drop drop drop
+        else
+            # Pack a new 16-bit buff entry
+            # Layout: stat(2)|is_debuff(1)|value(6)|turns(4)|active(1)|reserved(2)
+            dup.2 exec.get_ab_stat
+            # [stat, duration, stat_val, ab_idx, buff_felt]
+            push.16384 u32wrapping_mul
+            # [stat<<14, duration, stat_val, ab_idx, buff_felt]
+
+            dup.3 exec.get_ab_is_debuff
+            # [is_debuff, stat<<14, duration, stat_val, ab_idx, buff_felt]
+            push.8192 u32wrapping_mul
+            # [is_debuff<<13, stat<<14, ...]
+            u32wrapping_add
+            # [stat_bits|debuff_bit, duration, stat_val, ab_idx, buff_felt]
+
+            movup.2 push.128 u32wrapping_mul
+            # [stat_val<<7, header_bits, duration, ab_idx, buff_felt]
+            u32wrapping_add
+            # [header|value, duration, ab_idx, buff_felt]
+
+            swap push.8 u32wrapping_mul
+            # [duration<<3, header|value, ab_idx, buff_felt]
+            u32wrapping_add
+            # [partial, ab_idx, buff_felt]
+
+            push.4 u32wrapping_add
+            # [new_buff_16, ab_idx, buff_felt]  (active bit = 1, at bit 2 = value 4)
+
+            swap drop
+            # [new_buff_16, buff_felt]
+
+            # Find first inactive slot in buff_felt and insert
+            # buff_felt has 4 slots of 16 bits each
+            # Split into hi32 and lo32
+            dup.1 u32split
+            # [hi32, lo32, new_buff_16, buff_felt]
+
+            # Check slot 0 (upper 16 of hi32)
+            dup push.65536 u32div drop
+            # [slot0, hi32, lo32, new_buff_16, buff_felt]
+            push.4 u32div drop push.1 u32and
+            # [slot0_active, hi32, lo32, new_buff_16, buff_felt]
+            if.true
+                # Slot 0 active, check slot 1
+                dup push.65535 u32and
+                push.4 u32div drop push.1 u32and
+                if.true
+                    # Slot 1 active, check slot 2 (upper 16 of lo32)
+                    dup.1 push.65536 u32div drop
+                    push.4 u32div drop push.1 u32and
+                    if.true
+                        # Slot 2 active, use slot 3 (lower 16 of lo32)
+                        # lo32 = (slot2 << 16) | slot3
+                        # Replace slot3: lo32 = (lo32 & 0xFFFF0000) | new_buff_16
+                        swap
+                        push.4294901760 u32and
+                        # [lo32_masked, hi32, lo32_old, new_buff_16, buff_felt]
+                        # Wait, stack is getting confused. Let me track.
+                        # Stack was: [hi32, lo32, new_buff_16, buff_felt]
+                        # After swap: [lo32, hi32, new_buff_16, buff_felt]
+                        # push.4294901760 u32and: [lo32 & 0xFFFF0000, hi32, new_buff_16, buff_felt]
+                        movup.2 u32wrapping_add
+                        # [(lo32_hi | new_buff), hi32, buff_felt]
+                        swap
+                        # [hi32, new_lo32, buff_felt]
+                        # Reconstruct felt: hi32 * 2^32 + lo32
+                        push.4294967296 mul
+                        # Wait, this is felt arithmetic on what might be a u32. Let me think.
+                        # hi32 is a u32 value (field element), lo32 is a u32 value
+                        # buff_felt = hi32 * 2^32 + lo32
+                        # So: push.4294967296 mul add
+                        swap
+                        push.4294967296 mul add
+                        # Hmm: [new_lo32, hi32] -> hi32 * 2^32 gives the upper half
+                        # Then add new_lo32 gives the full value
+                        # But stack is [hi32, new_lo32, buff_felt]
+                        # push.4294967296 mul -> [hi32 * 2^32, new_lo32, buff_felt]
+                        # add -> [hi32*2^32 + new_lo32, buff_felt]
+                        # That's our new buff_felt! But we also have old buff_felt below.
+                        swap drop
+                        # [new_buff_felt]
+                    else
+                        # Use slot 2: replace upper 16 of lo32
+                        swap
+                        push.65535 u32and
+                        # [lo32 & 0xFFFF, hi32, new_buff_16, buff_felt]
+                        movup.2 push.65536 u32wrapping_mul u32wrapping_add
+                        # [new_lo32, hi32, buff_felt]
+                        swap push.4294967296 mul add
+                        swap drop
+                    end
+                else
+                    # Use slot 1: replace lower 16 of hi32
+                    # hi32 = (slot0 << 16) | slot1
+                    # new_hi32 = (hi32 & 0xFFFF0000) | new_buff_16
+                    push.4294901760 u32and
+                    # [hi32_masked, lo32, new_buff_16, buff_felt]
+                    movup.2 u32wrapping_add
+                    # [new_hi32, lo32, buff_felt]
+                    push.4294967296 mul add
+                    swap drop
+                end
+            else
+                # Use slot 0: replace upper 16 of hi32
+                push.65535 u32and
+                # [hi32_lo16, lo32, new_buff_16, buff_felt]
+                movup.2 push.65536 u32wrapping_mul u32wrapping_add
+                # [new_hi32, lo32, buff_felt]
+                push.4294967296 mul add
+                swap drop
+            end
+        end
+    end
+end
+
+# =============================================================================
+# Internal: tick_buffs — decrement turns, deactivate expired
+# =============================================================================
+
+#! Tick one 16-bit buff slot: decrement turns, deactivate if expired.
+#! Stack: [slot16] -> [slot16']
+proc tick_one_buff
+    dup push.4 u32div drop push.1 u32and
+    if.true
+        dup push.8 u32div drop push.15 u32and
+        push.1 u32wrapping_sub
+        dup push.0 eq
+        if.true
+            drop drop push.0
+        else
+            swap push.65415 u32and
+            swap push.8 u32wrapping_mul u32wrapping_add
+        end
+    end
+end
+
+#! Tick down buff durations for a champion's buff_felt.
+#! Stack: [buff_felt] -> [buff_felt']
+proc tick_buffs
+    u32split
+    # [hi32, lo32]
+    dup push.65536 u32div drop
+    swap push.65535 u32and
+    movup.2 dup push.65536 u32div drop
+    swap push.65535 u32and
+    # [slot3, slot2, slot1, slot0]
+    exec.tick_one_buff
+    swap exec.tick_one_buff swap
+    movup.2 exec.tick_one_buff movdn.2
+    movup.3 exec.tick_one_buff movdn.3
+    # Reassemble
+    movup.3 push.65536 u32wrapping_mul
+    movup.3 u32wrapping_add
+    movup.2 push.65536 u32wrapping_mul
+    movup.2 u32wrapping_add
+    swap push.4294967296 mul add
+end
+
+
+# =============================================================================
+# Internal: load/store champion state by team slot index
+# =============================================================================
+
+#! Load champion state word from team A slot (0, 1, or 2).
+#! Stack: [slot_idx] -> [f0, f1, f2, f3]
+proc load_champ_a
+    dup push.0 eq if.true
+        drop push.CHAMP_A_0[0..2] exec.active_account::get_item
+    else dup push.1 eq if.true
+        drop push.CHAMP_A_1[0..2] exec.active_account::get_item
+    else
+        drop push.CHAMP_A_2[0..2] exec.active_account::get_item
+    end end
+end
+
+#! Store champion state word to team A slot.
+#! Stack: [slot_idx, f0, f1, f2, f3] -> []
+proc store_champ_a
+    dup push.0 eq if.true
+        drop push.CHAMP_A_0[0..2] exec.native_account::set_item dropw
+    else dup push.1 eq if.true
+        drop push.CHAMP_A_1[0..2] exec.native_account::set_item dropw
+    else
+        drop push.CHAMP_A_2[0..2] exec.native_account::set_item dropw
+    end end
+end
+
+#! Load champion state word from team B slot.
+#! Stack: [slot_idx] -> [f0, f1, f2, f3]
+proc load_champ_b
+    dup push.0 eq if.true
+        drop push.CHAMP_B_0[0..2] exec.active_account::get_item
+    else dup push.1 eq if.true
+        drop push.CHAMP_B_1[0..2] exec.active_account::get_item
+    else
+        drop push.CHAMP_B_2[0..2] exec.active_account::get_item
+    end end
+end
+
+#! Store champion state word to team B slot.
+#! Stack: [slot_idx, f0, f1, f2, f3] -> []
+proc store_champ_b
+    dup push.0 eq if.true
+        drop push.CHAMP_B_0[0..2] exec.native_account::set_item dropw
+    else dup push.1 eq if.true
+        drop push.CHAMP_B_1[0..2] exec.native_account::set_item dropw
+    else
+        drop push.CHAMP_B_2[0..2] exec.native_account::set_item dropw
+    end end
+end
+
+#! Find team slot index (0,1,2) for a champion ID in team A.
+#! Stack: [champion_id] -> [slot_idx]
+proc find_slot_a
+    push.TEAM_A[0..2] exec.active_account::get_item
+    # [t0, t1, t2, 0, champion_id]
+    drop
+    # [t0, t1, t2, champion_id]
+    dup.3 dup.1 eq if.true
+        drop drop drop drop push.0
+    else dup.3 dup.2 eq if.true
+        drop drop drop drop push.1
+    else
+        drop drop drop drop push.2
+    end end
+end
+
+#! Find team slot index (0,1,2) for a champion ID in team B.
+#! Stack: [champion_id] -> [slot_idx]
+proc find_slot_b
+    push.TEAM_B[0..2] exec.active_account::get_item
+    drop
+    dup.3 dup.1 eq if.true
+        drop drop drop drop push.0
+    else dup.3 dup.2 eq if.true
+        drop drop drop drop push.1
+    else
+        drop drop drop drop push.2
+    end end
+end
+# =============================================================================
+# Internal: resolve_current_turn
+# =============================================================================
+
+# =============================================================================
+# Internal: resolve_current_turn
+# =============================================================================
+# Locals layout:
+#   0: champ_id_a    1: ab_idx_a     2: slot_idx_a
+#   3: a_hp          4: a_max_hp     5: a_ko         6: a_buffs
+#   7: champ_id_b    8: ab_idx_b     9: slot_idx_b
+#  10: b_hp         11: b_max_hp    12: b_ko        13: b_buffs
+#  14: a_goes_first 15: scratch
+
+@locals(16)
+proc resolve_current_turn
+    # ===== Phase 1: Decode moves =====
+    push.MOVE_A_REVEAL[0..2] exec.active_account::get_item
+    drop drop drop
+    # [encoded_move_a]
+    exec.decode_move
+    # [ability_index_a, champ_id_a]
+    swap dup loc_store.0
+    # [champ_id_a, ability_index_a]
+    push.2 u32wrapping_mul swap u32wrapping_add
+    loc_store.1
+    # ab_idx_a = champ_id_a * 2 + ability_index_a
+
+    push.MOVE_B_REVEAL[0..2] exec.active_account::get_item
+    drop drop drop
+    exec.decode_move
+    swap dup loc_store.7
+    push.2 u32wrapping_mul swap u32wrapping_add
+    loc_store.8
+
+    # ===== Phase 2: Find slots and load champion states =====
+    loc_load.0 exec.find_slot_a loc_store.2
+    loc_load.7 exec.find_slot_b loc_store.9
+
+    # Load champion A state: get_item returns [f0, f1, f2, f3]
+    loc_load.2 exec.load_champ_a
+    # [f0, f1, f2, f3]
+    movup.3 drop
+    # [f0, f1, f2]
+    movup.2 loc_store.6
+    # [f0, f1] -- f2=buffs stored
+    swap u32split swap drop loc_store.5
+    # [f0] -- is_ko stored (hi32 of f1)
+    u32split loc_store.3 loc_store.4
+    # -- current_hp(hi) and max_hp(lo) stored
+
+    # Load champion B state
+    loc_load.9 exec.load_champ_b
+    movup.3 drop
+    movup.2 loc_store.13
+    swap u32split swap drop loc_store.12
+    u32split loc_store.10 loc_store.11
+
+    # ===== Phase 3: Speed priority =====
+    loc_load.0 exec.get_speed
+    loc_load.6 push.1 exec.sum_buffs
+    u32wrapping_add
+    # [speed_a]
+
+    loc_load.7 exec.get_speed
+    loc_load.13 push.1 exec.sum_buffs
+    u32wrapping_add
+    # [speed_b, speed_a]
+
+    dup.1 dup.1 u32gt
+    # [speed_a > speed_b, speed_b, speed_a]
+    if.true
+        drop drop push.1
+    else
+        dup.1 dup.1 eq
+        if.true
+            drop drop
+            loc_load.0 loc_load.7 u32lt
+            # champ_id_a < champ_id_b => a goes first
+        else
+            drop drop push.0
+        end
+    end
+    loc_store.14
+
+    # ===== Phase 4: Execute actions in speed order =====
+    loc_load.14
+    if.true
+        # --- A acts first ---
+        # Execute A's action
+        loc_load.1 exec.get_ab_type
+        dup push.0 eq
+        if.true
+            drop
+            # DAMAGE: A -> B
+            loc_load.1 exec.get_ab_power
+            loc_load.0 exec.get_attack
+            loc_load.6 push.2 exec.sum_debuffs
+            dup.1 dup.1 u32lt if.true drop drop push.0 else u32wrapping_sub end
+            loc_load.0 exec.get_element loc_load.7 exec.get_element exec.get_type_multiplier
+            loc_load.7 exec.get_defense
+            loc_load.13 push.0 exec.sum_buffs
+            u32wrapping_add
+            movup.2 push.20 u32wrapping_add movup.3 u32wrapping_mul movup.2 u32wrapping_mul
+            push.2000 u32div drop
+            dup.1 dup.1 u32gt if.true drop drop push.1 else swap u32wrapping_sub end
+            loc_load.10
+            dup.1 dup.1 u32lt if.true drop drop push.0 else swap u32wrapping_sub end
+            dup loc_store.10
+            push.0 eq loc_store.12
+        else
+            dup push.1 eq
+            if.true
+                drop
+                # HEAL: A heals self
+                loc_load.1 exec.get_ab_heal
+                loc_load.3 u32wrapping_add
+                loc_load.4
+                dup.1 dup.1 u32lt if.true drop else swap drop end
+                loc_store.3
+            else
+                drop
+                # STAT_MOD
+                loc_load.1 exec.get_ab_is_debuff
+                if.true
+                    loc_load.1 loc_load.13 swap exec.apply_stat_mod loc_store.13
+                else
+                    loc_load.1 loc_load.6 swap exec.apply_stat_mod loc_store.6
+                end
+            end
+        end
+
+        # If B not KO, execute B's action
+        loc_load.12 push.0 eq
+        if.true
+            loc_load.8 exec.get_ab_type
+            dup push.0 eq
+            if.true
+                drop
+                # DAMAGE: B -> A
+                loc_load.8 exec.get_ab_power
+                loc_load.7 exec.get_attack
+                loc_load.13 push.2 exec.sum_debuffs
+                dup.1 dup.1 u32lt if.true drop drop push.0 else u32wrapping_sub end
+                loc_load.7 exec.get_element loc_load.0 exec.get_element exec.get_type_multiplier
+                loc_load.0 exec.get_defense
+                loc_load.6 push.0 exec.sum_buffs
+                u32wrapping_add
+                movup.2 push.20 u32wrapping_add movup.3 u32wrapping_mul movup.2 u32wrapping_mul
+                push.2000 u32div drop
+                dup.1 dup.1 u32gt if.true drop drop push.1 else swap u32wrapping_sub end
+                loc_load.3
+                dup.1 dup.1 u32lt if.true drop drop push.0 else swap u32wrapping_sub end
+                dup loc_store.3
+                push.0 eq loc_store.5
+            else
+                dup push.1 eq
+                if.true
+                    drop
+                    loc_load.8 exec.get_ab_heal
+                    loc_load.10 u32wrapping_add
+                    loc_load.11
+                    dup.1 dup.1 u32lt if.true drop else swap drop end
+                    loc_store.10
+                else
+                    drop
+                    loc_load.8 exec.get_ab_is_debuff
+                    if.true
+                        loc_load.8 loc_load.6 swap exec.apply_stat_mod loc_store.6
+                    else
+                        loc_load.8 loc_load.13 swap exec.apply_stat_mod loc_store.13
+                    end
+                end
+            end
+        end
+    else
+        # --- B acts first ---
+        loc_load.8 exec.get_ab_type
+        dup push.0 eq
+        if.true
+            drop
+            # DAMAGE: B -> A
+            loc_load.8 exec.get_ab_power
+            loc_load.7 exec.get_attack
+            loc_load.13 push.2 exec.sum_debuffs
+            dup.1 dup.1 u32lt if.true drop drop push.0 else u32wrapping_sub end
+            loc_load.7 exec.get_element loc_load.0 exec.get_element exec.get_type_multiplier
+            loc_load.0 exec.get_defense
+            loc_load.6 push.0 exec.sum_buffs
+            u32wrapping_add
+            movup.2 push.20 u32wrapping_add movup.3 u32wrapping_mul movup.2 u32wrapping_mul
+            push.2000 u32div drop
+            dup.1 dup.1 u32gt if.true drop drop push.1 else swap u32wrapping_sub end
+            loc_load.3
+            dup.1 dup.1 u32lt if.true drop drop push.0 else swap u32wrapping_sub end
+            dup loc_store.3
+            push.0 eq loc_store.5
+        else
+            dup push.1 eq
+            if.true
+                drop
+                loc_load.8 exec.get_ab_heal
+                loc_load.10 u32wrapping_add
+                loc_load.11
+                dup.1 dup.1 u32lt if.true drop else swap drop end
+                loc_store.10
+            else
+                drop
+                loc_load.8 exec.get_ab_is_debuff
+                if.true
+                    loc_load.8 loc_load.6 swap exec.apply_stat_mod loc_store.6
+                else
+                    loc_load.8 loc_load.13 swap exec.apply_stat_mod loc_store.13
+                end
+            end
+        end
+
+        # If A not KO, execute A's action
+        loc_load.5 push.0 eq
+        if.true
+            loc_load.1 exec.get_ab_type
+            dup push.0 eq
+            if.true
+                drop
+                # DAMAGE: A -> B
+                loc_load.1 exec.get_ab_power
+                loc_load.0 exec.get_attack
+                loc_load.6 push.2 exec.sum_debuffs
+                dup.1 dup.1 u32lt if.true drop drop push.0 else u32wrapping_sub end
+                loc_load.0 exec.get_element loc_load.7 exec.get_element exec.get_type_multiplier
+                loc_load.7 exec.get_defense
+                loc_load.13 push.0 exec.sum_buffs
+                u32wrapping_add
+                movup.2 push.20 u32wrapping_add movup.3 u32wrapping_mul movup.2 u32wrapping_mul
+                push.2000 u32div drop
+                dup.1 dup.1 u32gt if.true drop drop push.1 else swap u32wrapping_sub end
+                loc_load.10
+                dup.1 dup.1 u32lt if.true drop drop push.0 else swap u32wrapping_sub end
+                dup loc_store.10
+                push.0 eq loc_store.12
+            else
+                dup push.1 eq
+                if.true
+                    drop
+                    loc_load.1 exec.get_ab_heal
+                    loc_load.3 u32wrapping_add
+                    loc_load.4
+                    dup.1 dup.1 u32lt if.true drop else swap drop end
+                    loc_store.3
+                else
+                    drop
+                    loc_load.1 exec.get_ab_is_debuff
+                    if.true
+                        loc_load.1 loc_load.13 swap exec.apply_stat_mod loc_store.13
+                    else
+                        loc_load.1 loc_load.6 swap exec.apply_stat_mod loc_store.6
+                    end
+                end
+            end
+        end
+    end
+
+    # ===== Phase 5: Tick buffs =====
+    loc_load.6 exec.tick_buffs loc_store.6
+    loc_load.13 exec.tick_buffs loc_store.13
+
+    # ===== Phase 6: Pack and write back champion states =====
+    # Pack A: felt0 = (hp << 32) | max_hp, felt1 = (ko << 32), felt2 = buffs, felt3 = 0
+    loc_load.2
+    # [slot_idx_a]
+    loc_load.3 push.4294967296 mul loc_load.4 add
+    # [felt0_a, slot_idx_a]
+    loc_load.5 push.4294967296 mul
+    # [felt1_a, felt0_a, slot_idx_a]
+    loc_load.6
+    # [felt2_a, felt1_a, felt0_a, slot_idx_a]
+    push.0
+    # [0, felt2_a, felt1_a, felt0_a, slot_idx_a]
+    # set_item expects [slot0, slot1, v0, v1, v2, v3]
+    # But store_champ_a expects [slot_idx, f0, f1, f2, f3]
+    # Stack: [0, felt2, felt1, felt0, slot_idx] = [f3, f2, f1, f0, slot_idx]
+    # Need: [slot_idx, f0, f1, f2, f3]
+    movup.4
+    # [slot_idx, 0, felt2, felt1, felt0]
+    # Hmm, order is wrong. Let me fix.
+    # We have [f3=0, f2=buffs, f1=ko, f0=hp_packed, slot_idx]
+    # store_champ_a expects [slot_idx, f0, f1, f2, f3]
+    # Need to reverse the 4 values
+    swap movup.2 movup.3 movup.4
+    # [slot_idx, f0, f1, f2, f3]
+    exec.store_champ_a
+
+    # Pack B
+    loc_load.9
+    loc_load.10 push.4294967296 mul loc_load.11 add
+    loc_load.12 push.4294967296 mul
+    loc_load.13
+    push.0
+    swap movup.2 movup.3 movup.4
+    exec.store_champ_b
+
+    # ===== Phase 7: Check team elimination =====
+    # Check team A: all 3 KO?
+    push.0 exec.load_champ_a
+    drop drop u32split swap drop
+    # [ko_a0]
+    push.1 exec.load_champ_a
+    drop drop u32split swap drop
+    # [ko_a1, ko_a0]
+    push.2 exec.load_champ_a
+    drop drop u32split swap drop
+    # [ko_a2, ko_a1, ko_a0]
+    and and
+    # [a_all_ko]
+
+    push.0 exec.load_champ_b
+    drop drop u32split swap drop
+    push.1 exec.load_champ_b
+    drop drop u32split swap drop
+    push.2 exec.load_champ_b
+    drop drop u32split swap drop
+    and and
+    # [b_all_ko, a_all_ko]
+
+    dup.1 dup.1 or
+    if.true
+        # Game over - determine winner
+        dup.1 dup.1 and
+        if.true
+            drop drop push.3
+        else
+            swap
+            if.true
+                drop push.2
+            else
+                drop push.1
+            end
+        end
+        # [winner_val]
+
+        push.0 push.0 push.0 push.2
+        push.COMBAT_STATE[0..2]
+        exec.native_account::set_item dropw
+
+        exec.send_result_note
+    else
+        drop drop
+        # Advance round: round is at V3 (read via drop drop drop)
+        push.ROUND[0..2] exec.active_account::get_item
+        drop drop drop
+        push.1 u32wrapping_add
+        push.0 push.0 push.0
+        push.ROUND[0..2]
+        exec.native_account::set_item dropw
+
+        # Clear commits and reveals
+        padw push.MOVE_A_COMMIT[0..2] exec.native_account::set_item dropw
+        padw push.MOVE_B_COMMIT[0..2] exec.native_account::set_item dropw
+        padw push.MOVE_A_REVEAL[0..2] exec.native_account::set_item dropw
+        padw push.MOVE_B_REVEAL[0..2] exec.native_account::set_item dropw
+
+        # Update timeout: V0=timeout (on top after get_item)
+        push.0 push.0 push.0
+        exec.tx::get_block_number push.900 u32wrapping_add
+        push.TIMEOUT_HEIGHT[0..2]
+        exec.native_account::set_item dropw
+    end
+end
+
+# =============================================================================
+# Internal: pack initial champion state
+# =============================================================================
+
+#! Pack initial champion state: hp into felt0, zeros for felt1-3.
+#! felt0 = (hp << 32) | hp  (current_hp = max_hp = hp)
+#! Stack: [champion_id] -> [0, 0, 0, felt0]
+proc pack_init_champ
+    exec.get_hp
+    # Stack: [hp]
+    dup
+    # Stack: [hp, hp]
+    push.4294967296 mul add
+    # Stack: [felt0]  where felt0 = hp * 2^32 + hp
+    push.0 push.0 push.0
+    # Stack: [0, 0, 0, felt0]
+    movup.3
+    # Stack: [felt0, 0, 0, 0]
+    # After push.SLOT[0..2] + set_item: V0=felt0 (on top after get_item)
+end
+
+#! Write champion state word to a storage slot.
+#! Stack: [slot_const_0, slot_const_1, f3, f2, f1, f0, ...] -> [...]
+#! Uses set_item which expects [slot0, slot1, v0, v1, v2, v3]
+proc write_slot
+    exec.native_account::set_item
+    dropw
+end
+
+# =============================================================================
+# Exported Procedures
+# =============================================================================
+
+#! Initialize combat with two players and their teams.
+#! Stack: [c2b, c1b, c0b, c2a, c1a, c0a, pb_sfx, pb_pfx, pa_sfx, pa_pfx, sender_sfx, sender_pfx, pad(4)]
+#! 12 params + 4 pad = 16
+pub proc init_combat
+    # Assert combat_state == 0
+    push.COMBAT_STATE[0..2] exec.active_account::get_item
+    assertz.err=ERR_ALREADY_INIT
+    drop drop drop
+
+    # Validate all champion IDs <= 7
+    dup push.7 u32gt assertz.err=ERR_INVALID_CHAMP
+    dup.1 push.7 u32gt assertz.err=ERR_INVALID_CHAMP
+    dup.2 push.7 u32gt assertz.err=ERR_INVALID_CHAMP
+    dup.3 push.7 u32gt assertz.err=ERR_INVALID_CHAMP
+    dup.4 push.7 u32gt assertz.err=ERR_INVALID_CHAMP
+    dup.5 push.7 u32gt assertz.err=ERR_INVALID_CHAMP
+
+    # Validate no duplicates in team A
+    dup.3 dup.5 eq assertz.err=ERR_DUP_TEAM_A
+    dup.3 dup.6 eq assertz.err=ERR_DUP_TEAM_A
+    dup.4 dup.6 eq assertz.err=ERR_DUP_TEAM_A
+
+    # Validate no duplicates in team B
+    dup dup.2 eq assertz.err=ERR_DUP_TEAM_B
+    dup dup.3 eq assertz.err=ERR_DUP_TEAM_B
+    dup.1 dup.3 eq assertz.err=ERR_DUP_TEAM_B
+
+    # Validate no overlap between teams
+    dup dup.4 eq assertz.err=ERR_OVERLAP
+    dup dup.5 eq assertz.err=ERR_OVERLAP
+    dup dup.6 eq assertz.err=ERR_OVERLAP
+    dup.1 dup.4 eq assertz.err=ERR_OVERLAP
+    dup.1 dup.5 eq assertz.err=ERR_OVERLAP
+    dup.1 dup.6 eq assertz.err=ERR_OVERLAP
+    dup.2 dup.4 eq assertz.err=ERR_OVERLAP
+    dup.2 dup.5 eq assertz.err=ERR_OVERLAP
+    dup.2 dup.6 eq assertz.err=ERR_OVERLAP
+
+    # Store player A: want [val_pos9, val_pos8, 0, 0] closest-to-slot order
+    # After get_item: val_pos9 on top, then val_pos8, then 0, 0
+    push.0 push.0 dup.10 dup.12
+    push.PLAYER_A[0..2]
+    exec.native_account::set_item dropw
+
+    # Store player B: want [val_pos7, val_pos6, 0, 0] closest-to-slot order
+    push.0 push.0 dup.8 dup.10
+    push.PLAYER_B[0..2]
+    exec.native_account::set_item dropw
+
+    # Store team A
+    dup.5 dup.5 dup.5 push.0
+    push.TEAM_A[0..2]
+    exec.native_account::set_item dropw
+
+    # Store team B
+    dup.2 dup.2 dup.2 push.0
+    push.TEAM_B[0..2]
+    exec.native_account::set_item dropw
+
+    # Init champion states for team A
+    dup.5 exec.pack_init_champ
+    push.CHAMP_A_0[0..2]
+    exec.native_account::set_item dropw
+
+    dup.4 exec.pack_init_champ
+    push.CHAMP_A_1[0..2]
+    exec.native_account::set_item dropw
+
+    dup.3 exec.pack_init_champ
+    push.CHAMP_A_2[0..2]
+    exec.native_account::set_item dropw
+
+    # Init champion states for team B
+    dup.2 exec.pack_init_champ
+    push.CHAMP_B_0[0..2]
+    exec.native_account::set_item dropw
+
+    dup.1 exec.pack_init_champ
+    push.CHAMP_B_1[0..2]
+    exec.native_account::set_item dropw
+
+    dup exec.pack_init_champ
+    push.CHAMP_B_2[0..2]
+    exec.native_account::set_item dropw
+
+    # Set combat_state = 1: V0=1 (on top after get_item)
+    push.0 push.0 push.0 push.1
+    push.COMBAT_STATE[0..2]
+    exec.native_account::set_item dropw
+
+    # Set timeout = block_number + 900: V0=timeout (on top after get_item)
+    push.0 push.0 push.0
+    exec.tx::get_block_number
+    push.900 u32wrapping_add
+    push.TIMEOUT_HEIGHT[0..2]
+    exec.native_account::set_item dropw
+
+    # No explicit cleanup needed: the call frame maintains 16 elements.
+    # Drops below 16 are zero-padded by the VM, so the original params
+    # remain on the stack and we return them as-is.
+end
+
+#! Submit a move commitment hash.
+#! Stack: [commit_d, commit_c, commit_b, commit_a, player_sfx, player_pfx, pad(10)]
+#! 6 params + 10 pad = 16
+pub proc submit_commit
+    # Assert combat is active
+    push.COMBAT_STATE[0..2] exec.active_account::get_item
+    push.1 assert_eq.err=ERR_NOT_ACTIVE
+    drop drop drop
+
+    # Identify player
+    # Stack: [commit_d, commit_c, commit_b, commit_a, player_sfx, player_pfx, pad(10)]
+    push.PLAYER_A[0..2] exec.active_account::get_item
+    # Stack: [pa_pfx, pa_sfx, 0, 0, commit_d, commit_c, commit_b, commit_a, player_sfx, player_pfx, ...]
+    movup.2 drop movup.2 drop
+    # Stack: [pa_pfx, pa_sfx, commit_d, commit_c, commit_b, commit_a, player_sfx, player_pfx, ...]
+    dup.7 dup.7
+    # Stack: [player_pfx, player_sfx, pa_pfx, pa_sfx, ...]
+    movup.3 eq
+    # Stack: [pa_sfx==player_sfx, player_pfx, pa_pfx, ...]
+    swap movup.2 eq
+    # Stack: [pa_pfx==player_pfx, sfx_match, ...]
+    and
+    # Stack: [is_player_a, commit_d, commit_c, commit_b, commit_a, player_sfx, player_pfx, ...]
+
+    if.true
+        # Player A: check no existing commit
+        push.MOVE_A_COMMIT[0..2] exec.active_account::get_item
+        # Stack: [c0, c1, c2, c3, commit_d, commit_c, commit_b, commit_a, ...]
+        or or or assertz.err=ERR_ALREADY_COMMITTED
+        # Stack: [commit_d, commit_c, commit_b, commit_a, player_sfx, player_pfx, ...]
+
+        # Store commit: set_item expects [slot0, slot1, v0, v1, v2, v3]
+        dup.3 dup.3 dup.3 dup.3
+        # Stack: [commit_a, commit_b, commit_c, commit_d, commit_d, commit_c, commit_b, commit_a, ...]
+        push.MOVE_A_COMMIT[0..2]
+        exec.native_account::set_item dropw
+    else
+        # Check player B
+        push.PLAYER_B[0..2] exec.active_account::get_item
+        movup.2 drop movup.2 drop
+        # Stack: [pb_pfx, pb_sfx, commit_d, commit_c, commit_b, commit_a, player_sfx, player_pfx, ...]
+        dup.7 dup.7
+        movup.3 eq swap movup.2 eq and
+        assert.err=ERR_NOT_PLAYER
+
+        # Player B: check no existing commit
+        push.MOVE_B_COMMIT[0..2] exec.active_account::get_item
+        or or or assertz.err=ERR_ALREADY_COMMITTED
+
+        dup.3 dup.3 dup.3 dup.3
+        push.MOVE_B_COMMIT[0..2]
+        exec.native_account::set_item dropw
+    end
+
+    # Return as-is: call frame maintains 16 elements
+end
+
+#! Submit a move reveal with RPO hash verification.
+#! Stack: [nonce_p2, nonce_p1, encoded_move, player_sfx, player_pfx, pad(11)]
+#! 5 params + 11 pad = 16
+pub proc submit_reveal
+    # Assert combat is active
+    push.COMBAT_STATE[0..2] exec.active_account::get_item
+    push.1 assert_eq.err=ERR_NOT_ACTIVE
+    drop drop drop
+
+    # Stack: [nonce_p2, nonce_p1, encoded_move, player_sfx, player_pfx, pad(11)]
+
+    # Identify player A or B
+    push.PLAYER_A[0..2] exec.active_account::get_item
+    movup.2 drop movup.2 drop
+    # Stack: [pa_pfx, pa_sfx, nonce_p2, nonce_p1, encoded_move, player_sfx, player_pfx, ...]
+    dup.6 dup.6
+    movup.3 eq swap movup.2 eq and
+    # Stack: [is_player_a, nonce_p2, nonce_p1, encoded_move, player_sfx, player_pfx, ...]
+
+    if.true
+        # ---- Player A path ----
+        # Check has committed
+        push.MOVE_A_COMMIT[0..2] exec.active_account::get_item
+        # Stack: [c0, c1, c2, c3, nonce_p2, nonce_p1, encoded_move, player_sfx, player_pfx, ...]
+        dup.3 dup.3 dup.3 dup.3 or or or
+        assert.err=ERR_NO_COMMIT
+        # Stack: [c0, c1, c2, c3, nonce_p2, nonce_p1, encoded_move, ...]
+
+        # Check not already revealed
+        push.MOVE_A_REVEAL[0..2] exec.active_account::get_item
+        or or or assertz.err=ERR_ALREADY_REVEALED
+        # Stack: [c0, c1, c2, c3, nonce_p2, nonce_p1, encoded_move, ...]
+
+        # RPO hash verification: hash(encoded_move, nonce_p1, nonce_p2)
+        # Build hperm state: [C(4), B(4), A(4)] where C contains our data
+        # C = [encoded_move, nonce_p1, nonce_p2, 0]
+        dup.6 dup.6 dup.6
+        # Stack: [encoded_move, nonce_p1, nonce_p2, c0, c1, c2, c3, nonce_p2, nonce_p1, encoded_move, ...]
+        push.0
+        # Stack: [0, encoded_move, nonce_p1, nonce_p2, c0, c1, c2, c3, ...]
+        # But hperm expects [C3, C2, C1, C0, B3, B2, B1, B0, A3, A2, A1, A0]
+        # C = rate part 2, B = rate part 1 (output), A = capacity
+        # Our data goes into C: [0, nonce_p2, nonce_p1, encoded_move]
+        # Wait - the stack order for hperm is top=C[3], then C[2], C[1], C[0], B[3]...
+        # So we need: push data as C, then padw for B, padw for A
+        # But we have commitment on stack too. Let me reorganize.
+
+        # Save commitment to memory or keep below
+        # Actually let's push the hperm state fresh
+        # First save commitment words (c0-c3) deeper
+        movup.6 movup.6 movup.6
+        # [nonce_p2, nonce_p1, encoded_move, c0, c1, c2, c3, ...]
+        # Rearrange for C word: [0, nonce_p2, nonce_p1, encoded_move]
+        push.0 movdn.3
+        # [nonce_p2, nonce_p1, encoded_move, 0, c0, c1, c2, c3, ...]
+        # Need to reverse: hperm wants [C3, C2, C1, C0] on stack top-first
+        # C = [encoded_move, nonce_p1, nonce_p2, 0] (element 0, 1, 2, 3)
+        # On stack top-first: [0, nonce_p2, nonce_p1, encoded_move]
+        # Current: [nonce_p2, nonce_p1, encoded_move, 0, ...]
+        # Need: [0, nonce_p2, nonce_p1, encoded_move, ...]
+        movup.3
+        # [0, nonce_p2, nonce_p1, encoded_move, c0, c1, c2, c3, ...]
+
+        padw padw
+        # [0,0,0,0, 0,0,0,0, 0, nonce_p2, nonce_p1, encoded_move, c0, c1, c2, c3, ...]
+        # But this makes A on top, B in middle, C below
+        # hperm expects stack: [C, B, A] top-to-bottom
+        # Currently: [A(padw), B(padw), C(our data)] -- wrong order
+        # We need C on top: swap the words
+        swapw.2
+        # Now: [C, B, A] = [0,nonce_p2,nonce_p1,encoded_move, 0,0,0,0, 0,0,0,0, c0,c1,c2,c3,...]
+
+        hperm
+        # Stack: [C', B', A', c0, c1, c2, c3, ...]
+        # Hash output is in B' (middle word)
+        dropw       # drop C'
+        # Stack: [B'3, B'2, B'1, B'0, A'3, A'2, A'1, A'0, c0, c1, c2, c3, ...]
+        swapw dropw
+        # Stack: [B'3, B'2, B'1, B'0, c0, c1, c2, c3, ...]
+        # B' = [h0, h1, h2, h3] = our hash
+
+        # Compare hash with commitment: h0==c0, h1==c1, h2==c2, h3==c3
+        movup.7 dup.1 assert_eq.err=ERR_HASH_MISMATCH
+        # compared c3 with h3
+        movup.6 dup.1 assert_eq.err=ERR_HASH_MISMATCH
+        movup.5 dup.1 assert_eq.err=ERR_HASH_MISMATCH
+        movup.4 dup.1 assert_eq.err=ERR_HASH_MISMATCH
+        # Stack: [h3, h2, h1, h0, nonce_p2, nonce_p1, encoded_move, player_sfx, player_pfx, ...]
+        dropw
+        # Stack: [nonce_p2, nonce_p1, encoded_move, player_sfx, player_pfx, ...]
+
+        # Validate move range 1-16
+        dup.2
+        dup push.0 eq assertz.err=ERR_MOVE_RANGE
+        dup push.16 u32gt assertz.err=ERR_MOVE_RANGE
+        drop
+
+        # Decode move and validate champion is on team A and alive
+        dup.2 exec.decode_move
+        # Stack: [ability_index, champion_id, nonce_p2, nonce_p1, encoded_move, player_sfx, player_pfx, ...]
+        drop  # don't need ability_index for validation
+        # Stack: [champion_id, nonce_p2, nonce_p1, encoded_move, ...]
+
+        # Check champion is on team A
+        push.TEAM_A[0..2] exec.active_account::get_item
+        # Stack: [t0, t1, t2, t3, champion_id, ...]
+        drop  # drop t3 (always 0)
+        # Stack: [t0, t1, t2, champion_id, ...]
+        dup.3 dup.1 eq
+        # Stack: [t0==champ, t0, t1, t2, champion_id, ...]
+        if.true
+            # found at slot 0 -> champ_a_0
+            drop drop drop
+            # Stack: [champion_id, ...]
+            # Check alive
+            push.CHAMP_A_0[0..2] exec.active_account::get_item
+            # Stack: [f0, f1, f2, f3, champion_id, ...]
+            drop drop
+            # f1 has is_ko in upper 32
+            u32split swap drop
+            # Stack: [is_ko, f0, champion_id, ...]
+            assertz.err=ERR_CHAMP_KO
+            drop drop
+        else
+            dup.3 dup.2 eq
+            if.true
+                drop drop drop
+                push.CHAMP_A_1[0..2] exec.active_account::get_item
+                drop drop u32split swap drop
+                assertz.err=ERR_CHAMP_KO
+                drop drop
+            else
+                dup.3 dup.3 eq
+                assert.err=ERR_NOT_ON_TEAM
+                drop drop drop
+                push.CHAMP_A_2[0..2] exec.active_account::get_item
+                drop drop u32split swap drop
+                assertz.err=ERR_CHAMP_KO
+                drop drop
+            end
+        end
+        # Stack: [nonce_p2, nonce_p1, encoded_move, player_sfx, player_pfx, ...]
+
+        # Store reveal: [encoded_move, nonce_p1, nonce_p2, 0]
+        dup.2 dup.2 dup.2 push.0
+        push.MOVE_A_REVEAL[0..2]
+        exec.native_account::set_item dropw
+    else
+        # ---- Player B path ----
+        push.PLAYER_B[0..2] exec.active_account::get_item
+        movup.2 drop movup.2 drop
+        dup.6 dup.6
+        movup.3 eq swap movup.2 eq and
+        assert.err=ERR_NOT_PLAYER
+
+        # Check has committed
+        push.MOVE_B_COMMIT[0..2] exec.active_account::get_item
+        dup.3 dup.3 dup.3 dup.3 or or or
+        assert.err=ERR_NO_COMMIT
+
+        # Check not already revealed
+        push.MOVE_B_REVEAL[0..2] exec.active_account::get_item
+        or or or assertz.err=ERR_ALREADY_REVEALED
+
+        # RPO hash verification (same as player A)
+        movup.6 movup.6 movup.6
+        push.0 movdn.3
+        movup.3
+        padw padw swapw.2
+        hperm
+        dropw swapw dropw
+
+        movup.7 dup.1 assert_eq.err=ERR_HASH_MISMATCH
+        movup.6 dup.1 assert_eq.err=ERR_HASH_MISMATCH
+        movup.5 dup.1 assert_eq.err=ERR_HASH_MISMATCH
+        movup.4 dup.1 assert_eq.err=ERR_HASH_MISMATCH
+        dropw
+
+        # Validate move range
+        dup.2
+        dup push.0 eq assertz.err=ERR_MOVE_RANGE
+        dup push.16 u32gt assertz.err=ERR_MOVE_RANGE
+        drop
+
+        # Decode and validate champion on team B and alive
+        dup.2 exec.decode_move
+        drop
+        push.TEAM_B[0..2] exec.active_account::get_item
+        drop
+        dup.3 dup.1 eq
+        if.true
+            drop drop drop
+            push.CHAMP_B_0[0..2] exec.active_account::get_item
+            drop drop u32split swap drop
+            assertz.err=ERR_CHAMP_KO
+            drop drop
+        else
+            dup.3 dup.2 eq
+            if.true
+                drop drop drop
+                push.CHAMP_B_1[0..2] exec.active_account::get_item
+                drop drop u32split swap drop
+                assertz.err=ERR_CHAMP_KO
+                drop drop
+            else
+                dup.3 dup.3 eq
+                assert.err=ERR_NOT_ON_TEAM
+                drop drop drop
+                push.CHAMP_B_2[0..2] exec.active_account::get_item
+                drop drop u32split swap drop
+                assertz.err=ERR_CHAMP_KO
+                drop drop
+            end
+        end
+
+        # Store reveal
+        dup.2 dup.2 dup.2 push.0
+        push.MOVE_B_REVEAL[0..2]
+        exec.native_account::set_item dropw
+    end
+
+    # Check if both reveals present -> resolve
+    push.MOVE_A_REVEAL[0..2] exec.active_account::get_item
+    or or or
+    push.MOVE_B_REVEAL[0..2] exec.active_account::get_item
+    or or or
+    # Stack: [b_has_reveal, a_has_reveal, ...]
+    and
+    if.true
+        exec.resolve_current_turn
+    end
+
+    # Return as-is: call frame maintains 16 elements
+end
+
+#! Claim victory by opponent timeout.
+#! Stack: [player_sfx, player_pfx, pad(14)]
+#! 2 params + 14 pad = 16
+pub proc claim_combat_timeout
+    # Assert combat active
+    push.COMBAT_STATE[0..2] exec.active_account::get_item
+    push.1 assert_eq.err=ERR_NOT_ACTIVE
+    drop drop drop
+
+    # Assert timeout reached
+    exec.tx::get_block_number
+    push.TIMEOUT_HEIGHT[0..2] exec.active_account::get_item
+    # Stack: [timeout, 0, 0, 0, current_block, player_sfx, player_pfx, ...]
+    movup.4
+    # Stack: [current_block, timeout, 0, 0, 0, player_sfx, player_pfx, ...]
+    swap u32gt
+    assert.err=ERR_TIMEOUT_NOT_REACHED
+    drop drop drop
+    # Stack: [player_sfx, player_pfx, ...]
+
+    # Verify caller is a player
+    push.PLAYER_A[0..2] exec.active_account::get_item
+    movup.2 drop movup.2 drop
+    dup.3 dup.3
+    movup.3 eq swap movup.2 eq and
+    # Stack: [is_player_a, player_sfx, player_pfx, ...]
+
+    push.PLAYER_B[0..2] exec.active_account::get_item
+    movup.2 drop movup.2 drop
+    dup.4 dup.4
+    movup.3 eq swap movup.2 eq and
+    # Stack: [is_player_b, is_player_a, player_sfx, player_pfx, ...]
+
+    dup.1 dup.1 or assert.err=ERR_NOT_PLAYER
+    drop drop
+    # Stack: [player_sfx, player_pfx, ...]
+
+    # Determine winner by commit/reveal progress
+    # a_progress: 0=nothing, 1=committed, 2=revealed
+    push.MOVE_A_REVEAL[0..2] exec.active_account::get_item
+    or or or
+    # Stack: [a_revealed, player_sfx, player_pfx, ...]
+    if.true
+        push.2
+    else
+        push.MOVE_A_COMMIT[0..2] exec.active_account::get_item
+        or or or
+        if.true push.1 else push.0 end
+    end
+    # Stack: [a_progress, player_sfx, player_pfx, ...]
+
+    push.MOVE_B_REVEAL[0..2] exec.active_account::get_item
+    or or or
+    if.true
+        push.2
+    else
+        push.MOVE_B_COMMIT[0..2] exec.active_account::get_item
+        or or or
+        if.true push.1 else push.0 end
+    end
+    # Stack: [b_progress, a_progress, player_sfx, player_pfx, ...]
+
+    # Determine winner
+    dup.1 dup.1
+    # Stack: [b_progress, a_progress, b_progress, a_progress, ...]
+    u32gt
+    # Stack: [a>b, b_progress, a_progress, ...]
+    if.true
+        drop drop
+        push.1  # player A wins
+    else
+        swap u32gt
+        if.true
+            push.2  # player B wins
+        else
+            push.3  # draw
+        end
+    end
+    # Stack: [winner_val, player_sfx, player_pfx, ...]
+
+    # Set combat_state = 2: V0=2 (on top after get_item)
+    push.0 push.0 push.0 push.2
+    push.COMBAT_STATE[0..2]
+    exec.native_account::set_item dropw
+
+    # Send result note
+    exec.send_result_note
+
+    # Return as-is: call frame maintains 16 elements
+end
+
+#! Accept an asset into the account vault.
+#! Stack: [ASSET(4), pad(12)] -> [pad(16)]
+pub proc receive_asset
+    exec.native_account::add_asset
+    dropw
+    # Return as-is: call frame maintains 16 elements
+end

@@ -4,12 +4,17 @@
  * Each turn proceeds through a strict sequence of phases:
  *
  *  1. **choosing**      - Player selects a champion and ability.
- *  2. **committing**    - The move is hashed and commitment notes are sent.
- *  3. **waitingCommit** - Waiting for the opponent's commitment notes.
- *  4. **revealing**     - Both committed; reveal notes are sent.
- *  5. **waitingReveal** - Waiting for the opponent's reveal notes.
+ *  2. **committing**    - The move is hashed and commitment is sent to the arena.
+ *  3. **waitingCommit** - Waiting for the opponent's commitment (arena polling).
+ *  4. **revealing**     - Both committed; reveal is sent to the arena.
+ *  5. **waitingReveal** - Waiting for the opponent's reveal (arena polling).
  *  6. **resolving**     - Both revealed; combat engine runs to determine outcomes.
  *  7. **animating**     - UI plays attack/damage animations before next turn.
+ *
+ * The arena contract auto-resolves when both reveals arrive. The frontend
+ * detects this via two mechanisms:
+ *  - Normal: opponent's reveal slot becomes non-zero (move readable)
+ *  - Fallback: arena.round increments past battle.round (move data cleared)
  *
  * After resolution, champion states are updated, and the game checks whether
  * either team has been eliminated. If so, the match result is set and the
@@ -73,6 +78,10 @@ export function useCombatTurn(): UseCombatTurnReturn {
     error,
   } = useCommitReveal();
 
+  // Read arena state directly from Zustand (avoids creating a duplicate polling loop).
+  const arenaRound = useGameStore((s) => s.arena.round);
+  const arenaWinner = useGameStore((s) => s.arena.winner);
+
   // Keep track of the encoded local move for resolution
   const localMoveRef = useRef<number | null>(null);
   // Guard against double-resolution in the same round
@@ -122,9 +131,9 @@ export function useCombatTurn(): UseCombatTurnReturn {
   useEffect(() => {
     if (phase !== "revealing" || isRevealed) return;
 
-    (async () => {
-      await reveal();
-    })();
+    reveal().catch((err) => {
+      console.error("[useCombatTurn] reveal failed", err);
+    });
   }, [phase, isRevealed, reveal]);
 
   // Once we have revealed, advance to waiting or resolving
@@ -138,7 +147,7 @@ export function useCombatTurn(): UseCombatTurnReturn {
     }
   }, [phase, isRevealed, opponentRevealed, opponentMove, setBattlePhase]);
 
-  // waitingReveal -> resolving (opponent revealed and verified)
+  // waitingReveal -> resolving (opponent revealed and move detected)
   useEffect(() => {
     if (phase === "waitingReveal" && opponentRevealed && opponentMove !== null) {
       setBattlePhase("resolving");
@@ -146,73 +155,123 @@ export function useCombatTurn(): UseCombatTurnReturn {
   }, [phase, opponentRevealed, opponentMove, setBattlePhase]);
 
   // -----------------------------------------------------------------------
+  // Fallback: arena round advanced without us detecting opponent's reveal.
+  // This happens when both reveals land in the same block — the arena
+  // auto-resolves and clears the reveal slots before we can poll them.
+  // In this case, advance to resolving with a null opponent move.
+  // -----------------------------------------------------------------------
+  useEffect(() => {
+    if (phase !== "waitingReveal" && phase !== "waitingCommit") return;
+    if (resolvedRoundRef.current === round) return;
+    if (arenaRound <= round) return;
+
+    // Arena has advanced past our local round — the turn was resolved on-chain
+    console.log("[useCombatTurn] arena round advanced (fallback)", {
+      arenaRound,
+      localRound: round,
+    });
+    setBattlePhase("resolving");
+  }, [phase, round, arenaRound, setBattlePhase]);
+
+  // -----------------------------------------------------------------------
   // resolving -> run combat engine -> animating
   // -----------------------------------------------------------------------
   useEffect(() => {
     if (phase !== "resolving") return;
     if (resolvedRoundRef.current === round) return; // Already resolved this round
-    if (localMoveRef.current === null || opponentMove === null) return;
+    if (localMoveRef.current === null) return;
 
     resolvedRoundRef.current = round;
 
-    const myAction = decodeMove(localMoveRef.current);
-    const oppAction = decodeMove(opponentMove);
+    // If we have the opponent's move, resolve locally for accurate animation.
+    // If not (fallback case), we still advance but with limited animation data.
+    if (opponentMove !== null) {
+      const myAction = decodeMove(localMoveRef.current);
+      const oppAction = decodeMove(opponentMove);
 
-    const result = resolveTurn(myChampions, opponentChampions, myAction, oppAction);
+      const result = resolveTurn(myChampions, opponentChampions, myAction, oppAction);
 
-    // Update champion states
-    updateChampions(result.myChampions, result.opponentChampions);
+      // Update champion states
+      updateChampions(result.myChampions, result.opponentChampions);
 
-    // Record the turn
-    const record: TurnRecord = {
-      round,
-      myAction,
-      opponentAction: oppAction,
-      events: result.events,
-    };
-    addTurnRecord(record);
+      // Record the turn
+      const record: TurnRecord = {
+        round,
+        myAction,
+        opponentAction: oppAction,
+        events: result.events,
+      };
+      addTurnRecord(record);
 
-    // Check if any champion was newly KO'd this turn
-    const prevMyKOs = myChampions.filter((c) => c.isKO).length;
-    const prevOppKOs = opponentChampions.filter((c) => c.isKO).length;
-    const newMyKOs = result.myChampions.filter((c) => c.isKO).length;
-    const newOppKOs = result.opponentChampions.filter((c) => c.isKO).length;
-    if (newMyKOs > prevMyKOs || newOppKOs > prevOppKOs) {
-      setTimeout(() => playSfx("ko"), 500);
-    }
+      // Check if any champion was newly KO'd this turn
+      const prevMyKOs = myChampions.filter((c) => c.isKO).length;
+      const prevOppKOs = opponentChampions.filter((c) => c.isKO).length;
+      const newMyKOs = result.myChampions.filter((c) => c.isKO).length;
+      const newOppKOs = result.opponentChampions.filter((c) => c.isKO).length;
+      if (newMyKOs > prevMyKOs || newOppKOs > prevOppKOs) {
+        setTimeout(() => playSfx("ko"), 500);
+      }
 
-    // Transition to animation phase
-    setBattlePhase("animating");
+      // Transition to animation phase
+      setBattlePhase("animating");
 
-    // Check for game-over conditions after a brief delay for animations
-    const myEliminated = isTeamEliminated(result.myChampions);
-    const oppEliminated = isTeamEliminated(result.opponentChampions);
+      // Check for game-over conditions after animations
+      const myEliminated = isTeamEliminated(result.myChampions);
+      const oppEliminated = isTeamEliminated(result.opponentChampions);
 
-    if (myEliminated || oppEliminated) {
-      // Determine winner
-      const winner: "me" | "opponent" | "draw" =
-        myEliminated && oppEliminated
-          ? "draw"
-          : oppEliminated
-            ? "me"
-            : "opponent";
+      if (myEliminated || oppEliminated) {
+        const winner: "me" | "opponent" | "draw" =
+          myEliminated && oppEliminated
+            ? "draw"
+            : oppEliminated
+              ? "me"
+              : "opponent";
 
-      // Determine MVP: the champion with the most total damage dealt
-      const allChampions = [...result.myChampions, ...result.opponentChampions];
-      const mvp = allChampions.reduce(
-        (best, c) => (c.totalDamageDealt > (best?.totalDamageDealt ?? 0) ? c : best),
-        allChampions[0],
-      );
+        const allChampions = [...result.myChampions, ...result.opponentChampions];
+        const mvp = allChampions.reduce(
+          (best, c) => (c.totalDamageDealt > (best?.totalDamageDealt ?? 0) ? c : best),
+          allChampions[0],
+        );
 
-      setTimeout(() => {
-        setResult(winner, mvp?.id ?? null);
-      }, ANIMATION_DURATION_MS);
+        setTimeout(() => {
+          setResult(winner, mvp?.id ?? null);
+        }, ANIMATION_DURATION_MS);
+      } else {
+        setTimeout(() => {
+          localMoveRef.current = null;
+          nextRound();
+        }, ANIMATION_DURATION_MS);
+      }
     } else {
-      // Advance to next round after animation
-      setTimeout(() => {
-        localMoveRef.current = null;
-        nextRound();
-      }, ANIMATION_DURATION_MS);
+      // Fallback: arena resolved but we don't have the opponent's specific move.
+      // This is a rare edge case (both reveals in same block).
+      // Skip animation, check arena winner slot, and advance.
+      console.warn("[useCombatTurn] resolving without opponent move (arena fallback)");
+
+      setBattlePhase("animating");
+
+      // Check arena winner slot for game-over
+      if (arenaWinner !== 0) {
+        const role = useGameStore.getState().match.role;
+        const isHost = role === "host";
+
+        const winner: "me" | "opponent" | "draw" =
+          arenaWinner === 3
+            ? "draw"
+            : (arenaWinner === 1 && isHost) || (arenaWinner === 2 && !isHost)
+              ? "me"
+              : "opponent";
+
+        setTimeout(() => {
+          setResult(winner, null);
+        }, ANIMATION_DURATION_MS);
+      } else {
+        // Turn resolved but game continues — advance to next round
+        setTimeout(() => {
+          localMoveRef.current = null;
+          nextRound();
+        }, ANIMATION_DURATION_MS);
+      }
     }
   }, [
     phase,
@@ -225,6 +284,7 @@ export function useCombatTurn(): UseCombatTurnReturn {
     setBattlePhase,
     nextRound,
     setResult,
+    arenaWinner,
   ]);
 
   return {

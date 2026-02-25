@@ -1,0 +1,104 @@
+# =============================================================================
+# Init Combat Note Script
+# =============================================================================
+#
+# Initializes a combat account with game data from matchmaking.
+# Note inputs (10 felts): [pa_pfx, pa_sfx, pb_pfx, pb_sfx, c0a, c1a, c2a, c0b, c1b, c2b]
+# Carries a dust asset (1 unit) to make the note valid.
+# Args word is unused.
+#
+# Entry stack: [ARGS(4), pad(12)]
+
+use miden::protocol::active_note
+
+begin
+    # --- Step 1: Deposit dust asset into combat account vault ---
+    # Drop unused args
+    dropw
+
+    # Store assets to memory at addr 1000
+    push.1000 exec.active_note::get_assets
+    # => [num_assets, 1000, ...]
+
+    # Expect exactly 1 asset
+    assert
+    # => [1000, ...]
+
+    # Load asset word from memory (addr on stack top)
+    mem_loadw_be
+    # => [ASSET(4), ...]
+
+    # Deposit asset via cross-context call
+    call.::nofile::receive_asset
+    # => [ret(16)]
+
+    # Clean return values
+    dropw dropw dropw dropw
+    # => []
+
+    # --- Step 2: Get sender (matchmaking account ID) ---
+    exec.active_note::get_sender
+    # => [sender_pfx, sender_sfx]
+
+    # init_combat expects sender_pfx deeper, sender_sfx higher
+    swap
+    # => [sender_sfx, sender_pfx]
+
+    # --- Step 3: Load note inputs (10 felts) to memory at addr 2000 ---
+    push.2000 exec.active_note::get_inputs
+    # => [num_inputs, 2000, sender_sfx, sender_pfx, ...]
+
+    eq.10 assert
+    # => [2000, sender_sfx, sender_pfx, ...]
+
+    drop
+    # => [sender_sfx, sender_pfx, ...]
+
+    # --- Step 4: Build init_combat parameter stack ---
+    # Target (top -> bottom):
+    #   c2b c1b c0b c2a c1a c0a pb_sfx pb_pfx pa_sfx pa_pfx sender_sfx sender_pfx pad(4)
+    # Which is inputs[9 8 7 6 5 4 3 2 1 0] then sender then padding.
+    #
+    # mem_loadw_be returns inputs in natural order: [i0, i1, i2, i3] with i0 on top.
+    # MLoadW's shift_left(5) consumes the address + all padw scratch elements,
+    # so no stray zeros remain after padw push.ADDR mem_loadw_be.
+    # We reverse each loaded word to get inputs in descending index order.
+
+    # Load word 0 (inputs 0-3): [pa_pfx, pa_sfx, pb_pfx, pb_sfx]
+    padw push.2000 mem_loadw_be
+    # => [pa_pfx, pa_sfx, pb_pfx, pb_sfx, sender_sfx, sender_pfx, ...]
+
+    # Reverse to [pb_sfx, pb_pfx, pa_sfx, pa_pfx]
+    swap movup.2 movup.3
+    # => [pb_sfx, pb_pfx, pa_sfx, pa_pfx, sender_sfx, sender_pfx, ...]
+
+    # Load word 1 (inputs 4-7): [c0a, c1a, c2a, c0b]
+    padw push.2001 mem_loadw_be
+    # => [c0a, c1a, c2a, c0b, pb_sfx, pb_pfx, ...]
+
+    # Reverse to [c0b, c2a, c1a, c0a]
+    swap movup.2 movup.3
+    # => [c0b, c2a, c1a, c0a, pb_sfx, pb_pfx, pa_sfx, pa_pfx, sender_sfx, sender_pfx, ...]
+
+    # Load word 2 (inputs 8-9): [c1b, c2b, 0, 0]
+    padw push.2002 mem_loadw_be
+    # => [c1b, c2b, 0, 0, c0b, c2a, c1a, c0a, ...]
+
+    # Swap c1b and c2b so c2b is on top
+    swap
+    # => [c2b, c1b, 0, 0, c0b, ...]
+
+    # Drop the 2 padding zeros from partial word (only 2 of 4 slots used)
+    movup.2 drop movup.2 drop
+    # => [c2b, c1b, c0b, c2a, c1a, c0a, pb_sfx, pb_pfx, pa_sfx, pa_pfx, sender_sfx, sender_pfx, ...]
+
+    # --- Step 5: Call init_combat ---
+    # Stack matches: [c2b, c1b, c0b, c2a, c1a, c0a, pb_sfx, pb_pfx, pa_sfx, pa_pfx,
+    #                 sender_sfx, sender_pfx, pad(4)]
+    call.::nofile::init_combat
+    # => [ret(16)]
+
+    # Clean return values
+    dropw dropw dropw dropw
+    # => []
+end

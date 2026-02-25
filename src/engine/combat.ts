@@ -1,6 +1,6 @@
 import type { Champion, ChampionState, TurnAction, TurnEvent, Buff } from "../types";
 import { getChampion } from "../constants/champions";
-import { calculateDamage, calculateBurnDamage } from "./damage";
+import { calculateDamage } from "./damage";
 
 interface CombatSide {
   champion: Champion;
@@ -58,10 +58,6 @@ export function resolveTurn(
     executeAction(second, first, !firstIsMe, events);
   }
 
-  // Process burn ticks for both sides (if alive)
-  processBurnTick(myState, events);
-  processBurnTick(oppState, events);
-
   // Tick down buff durations
   tickBuffs(myState);
   tickBuffs(oppState);
@@ -79,7 +75,7 @@ function getEffectiveSpeed(champion: Champion, state: ChampionState): number {
 function executeAction(
   actor: CombatSide,
   target: CombatSide,
-  actorIsMe: boolean,
+  _actorIsMe: boolean,
   events: TurnEvent[],
 ): void {
   const ability = actor.champion.abilities[actor.action.abilityIndex];
@@ -114,107 +110,45 @@ function executeAction(
       break;
     }
 
-    case "damage_dot": {
-      // Initial hit damage
-      const { damage, typeMultiplier } = calculateDamage(
-        actor.champion,
-        target.champion,
-        target.state,
-        ability,
-        actor.state.buffs,
-      );
-      target.state.currentHp = Math.max(0, target.state.currentHp - damage);
-      actor.state.totalDamageDealt += damage;
-
-      events.push({
-        type: "attack",
-        attackerId: actor.champion.id,
-        defenderId: target.champion.id,
-        damage,
-        effective: typeMultiplier > 1 ? 2 : typeMultiplier < 1 ? 0 : 1,
-        isSuperEffective: typeMultiplier > 1,
-        isResisted: typeMultiplier < 1,
-      });
-
-      if (target.state.currentHp === 0) {
-        target.state.isKO = true;
-        events.push({ type: "ko", championId: target.champion.id });
-      }
-
-      // Apply burn
-      if (ability.appliesBurn && ability.duration && !target.state.isKO) {
-        target.state.burnTurns = ability.duration;
-        events.push({ type: "burn_applied", targetId: target.champion.id, duration: ability.duration });
-      }
-      break;
-    }
-
     case "heal": {
       const healAmount = ability.healAmount ?? 0;
       const oldHp = actor.state.currentHp;
       actor.state.currentHp = Math.min(actor.state.maxHp, oldHp + healAmount);
       const actualHeal = actor.state.currentHp - oldHp;
-      // Always emit heal event so the animation system shows feedback,
-      // even when the champion is already at full HP (amount will be 0).
       events.push({ type: "heal", championId: actor.champion.id, amount: actualHeal, newHp: actor.state.currentHp });
       break;
     }
 
-    case "buff": {
+    case "stat_mod": {
       if (ability.stat && ability.statValue && ability.duration) {
+        const isDebuff = ability.isDebuff ?? false;
         const buff: Buff = {
           type: ability.stat,
           value: ability.statValue,
           turnsRemaining: ability.duration,
-          isDebuff: false,
+          isDebuff,
         };
-        actor.state.buffs.push(buff);
-        events.push({
-          type: "buff",
-          championId: actor.champion.id,
-          stat: ability.stat,
-          value: ability.statValue,
-          duration: ability.duration,
-        });
+        if (isDebuff) {
+          target.state.buffs.push(buff);
+          events.push({
+            type: "debuff",
+            targetId: target.champion.id,
+            stat: ability.stat,
+            value: ability.statValue,
+            duration: ability.duration,
+          });
+        } else {
+          actor.state.buffs.push(buff);
+          events.push({
+            type: "buff",
+            championId: actor.champion.id,
+            stat: ability.stat,
+            value: ability.statValue,
+            duration: ability.duration,
+          });
+        }
       }
       break;
-    }
-
-    case "debuff": {
-      if (ability.stat && ability.statValue && ability.duration) {
-        const debuff: Buff = {
-          type: ability.stat,
-          value: ability.statValue,
-          turnsRemaining: ability.duration,
-          isDebuff: true,
-        };
-        // Debuffs go on the target
-        const _actorIsMe = actorIsMe;
-        void _actorIsMe;
-        target.state.buffs.push(debuff);
-        events.push({
-          type: "debuff",
-          targetId: target.champion.id,
-          stat: ability.stat,
-          value: ability.statValue,
-          duration: ability.duration,
-        });
-      }
-      break;
-    }
-  }
-}
-
-function processBurnTick(state: ChampionState, events: TurnEvent[]): void {
-  if (state.burnTurns > 0 && !state.isKO) {
-    const burnDamage = calculateBurnDamage(state);
-    state.currentHp = Math.max(0, state.currentHp - burnDamage);
-    events.push({ type: "burn_tick", championId: state.id, damage: burnDamage });
-
-    state.burnTurns--;
-    if (state.currentHp === 0) {
-      state.isKO = true;
-      events.push({ type: "ko", championId: state.id });
     }
   }
 }
@@ -235,7 +169,6 @@ export function initChampionState(championId: number): ChampionState {
     currentHp: champ.hp,
     maxHp: champ.hp,
     buffs: [],
-    burnTurns: 0,
     isKO: false,
     totalDamageDealt: 0,
   };

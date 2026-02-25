@@ -14,7 +14,7 @@ export const CHAMPIONS: Champion[] = [
     modelPath: `${BASE}models/inferno.glb`,
     abilities: [
       { name: "Eruption", power: 35, type: "damage", description: "Erupts with volcanic fury" },
-      { name: "Scorch", power: 15, type: "damage_dot", appliesBurn: true, duration: 3, description: "Burns target for 3 turns" },
+      { name: "Scorch", power: 20, type: "damage", description: "Sears the target with intense heat" },
     ],
   },
   {
@@ -28,7 +28,7 @@ export const CHAMPIONS: Champion[] = [
     modelPath: `${BASE}models/boulder.glb`,
     abilities: [
       { name: "Rock Slam", power: 28, type: "damage", description: "Smashes with a massive boulder" },
-      { name: "Fortify", power: 0, type: "buff", stat: "defense", statValue: 6, duration: 2, description: "Hardens skin like stone (+6 DEF)" },
+      { name: "Fortify", power: 0, type: "stat_mod", stat: "defense", statValue: 6, duration: 2, isDebuff: false, description: "Hardens skin like stone (+6 DEF)" },
     ],
   },
   {
@@ -42,7 +42,7 @@ export const CHAMPIONS: Champion[] = [
     modelPath: `${BASE}models/ember.glb`,
     abilities: [
       { name: "Fireball", power: 25, type: "damage", description: "Hurls a blazing fireball" },
-      { name: "Flame Shield", power: 0, type: "buff", stat: "defense", statValue: 5, duration: 2, description: "Wraps in protective flames (+5 DEF)" },
+      { name: "Flame Shield", power: 0, type: "stat_mod", stat: "defense", statValue: 5, duration: 2, isDebuff: false, description: "Wraps in protective flames (+5 DEF)" },
     ],
   },
   {
@@ -70,7 +70,7 @@ export const CHAMPIONS: Champion[] = [
     modelPath: `${BASE}models/gale.glb`,
     abilities: [
       { name: "Wind Blade", power: 24, type: "damage", description: "Slices with razor-sharp wind" },
-      { name: "Haste", power: 0, type: "buff", stat: "speed", statValue: 5, duration: 2, description: "Accelerates to blinding speed (+5 SPD)" },
+      { name: "Haste", power: 0, type: "stat_mod", stat: "speed", statValue: 5, duration: 2, isDebuff: false, description: "Accelerates to blinding speed (+5 SPD)" },
     ],
   },
   {
@@ -84,7 +84,7 @@ export const CHAMPIONS: Champion[] = [
     modelPath: `${BASE}models/tide.glb`,
     abilities: [
       { name: "Whirlpool", power: 20, type: "damage", description: "Drags foe into a whirlpool" },
-      { name: "Mist", power: 0, type: "debuff", stat: "attack", statValue: 4, duration: 2, description: "Shrouds enemy in mist (-4 ATK)" },
+      { name: "Mist", power: 0, type: "stat_mod", stat: "attack", statValue: 4, duration: 2, isDebuff: true, description: "Shrouds enemy in mist (-4 ATK)" },
     ],
   },
   {
@@ -98,7 +98,7 @@ export const CHAMPIONS: Champion[] = [
     modelPath: `${BASE}models/quake.glb`,
     abilities: [
       { name: "Earthquake", power: 26, type: "damage", description: "Shakes the earth violently" },
-      { name: "Stone Wall", power: 0, type: "buff", stat: "defense", statValue: 8, duration: 1, description: "Raises a stone barrier (+8 DEF)" },
+      { name: "Stone Wall", power: 0, type: "stat_mod", stat: "defense", statValue: 8, duration: 1, isDebuff: false, description: "Raises a stone barrier (+8 DEF)" },
     ],
   },
   {
@@ -112,35 +112,7 @@ export const CHAMPIONS: Champion[] = [
     modelPath: `${BASE}models/storm.glb`,
     abilities: [
       { name: "Lightning", power: 30, type: "damage", description: "Strikes with lightning" },
-      { name: "Dodge", power: 0, type: "buff", stat: "speed", statValue: 6, duration: 2, description: "Enhances evasive reflexes (+6 SPD)" },
-    ],
-  },
-  {
-    id: 8,
-    name: "Phoenix",
-    hp: 65,
-    attack: 22,
-    defense: 4,
-    speed: 17,
-    element: "fire",
-    modelPath: `${BASE}models/phoenix.glb`,
-    abilities: [
-      { name: "Blaze", power: 38, type: "damage", description: "Engulfs in an inferno" },
-      { name: "Rebirth", power: 0, type: "heal", healAmount: 30, description: "Rises from ashes (+30 HP)" },
-    ],
-  },
-  {
-    id: 9,
-    name: "Kraken",
-    hp: 120,
-    attack: 10,
-    defense: 16,
-    speed: 6,
-    element: "water",
-    modelPath: `${BASE}models/kraken.glb`,
-    abilities: [
-      { name: "Depth Charge", power: 24, type: "damage", description: "Launches a pressurized blast" },
-      { name: "Shell", power: 0, type: "buff", stat: "defense", statValue: 7, duration: 2, description: "Retreats into armored shell (+7 DEF)" },
+      { name: "Dodge", power: 0, type: "stat_mod", stat: "speed", statValue: 6, duration: 2, isDebuff: false, description: "Enhances evasive reflexes (+6 SPD)" },
     ],
   },
 ];

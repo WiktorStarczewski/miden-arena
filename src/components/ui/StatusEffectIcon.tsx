@@ -3,8 +3,6 @@ import type { Buff } from "../../types/game";
 
 interface StatusEffectIconProps {
   buff?: Buff;
-  isBurn?: boolean;
-  burnTurns?: number;
 }
 
 const BUFF_CONFIG: Record<
@@ -18,25 +16,7 @@ const BUFF_CONFIG: Record<
 
 export default function StatusEffectIcon({
   buff,
-  isBurn = false,
-  burnTurns = 0,
 }: StatusEffectIconProps) {
-  if (isBurn && burnTurns > 0) {
-    return (
-      <div
-        className="
-          inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md
-          bg-orange-500/15 border border-orange-500/30
-          text-orange-400
-        "
-        title={`Burn: ${burnTurns} turns remaining`}
-      >
-        <span className="text-xs leading-none">{"\u2622"}</span>
-        <span className="text-[10px] font-bold tabular-nums">{burnTurns}</span>
-      </div>
-    );
-  }
-
   if (!buff) return null;
 
   const config = BUFF_CONFIG[buff.type];
