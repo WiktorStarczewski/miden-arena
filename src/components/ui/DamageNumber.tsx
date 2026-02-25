@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 
 interface DamageNumberProps {
   value: number;
-  type: "damage" | "heal" | "burn";
+  type: "damage" | "heal";
   position?: { x: number; y: number };
 }
 
@@ -20,11 +20,6 @@ const TYPE_STYLES: Record<
     color: "#4ade80",
     prefix: "+",
     shadow: "0 0 12px rgba(74, 222, 128, 0.6), 0 0 24px rgba(74, 222, 128, 0.3)",
-  },
-  burn: {
-    color: "#fb923c",
-    prefix: "-",
-    shadow: "0 0 12px rgba(251, 146, 60, 0.6), 0 0 24px rgba(251, 146, 60, 0.3)",
   },
 };
 

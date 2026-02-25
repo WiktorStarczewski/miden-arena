@@ -24,7 +24,7 @@ import { Word } from "@miden-sdk/miden-sdk";
 import { useGameStore } from "../store/gameStore";
 import { buildCommitNote, buildRevealNote, submitArenaNote } from "../utils/arenaNote";
 import { createCommitment, createReveal } from "../engine/commitment";
-import { ARENA_ACCOUNT_ID } from "../constants/miden";
+import { COMBAT_ACCOUNT_ID } from "../constants/miden";
 import type { CommitData } from "../types";
 
 // ---------------------------------------------------------------------------
@@ -125,7 +125,7 @@ export function useCommitReveal(): UseCommitRevealReturn {
         const commitment = createCommitment(move);
 
         // Build commit note (phase=0)
-        const note = await buildCommitNote(sessionWalletId, ARENA_ACCOUNT_ID);
+        const note = await buildCommitNote(sessionWalletId, COMBAT_ACCOUNT_ID);
 
         // Args: the 4-Felt RPO hash
         const commitArgs = new Word(BigUint64Array.from(commitment.commitWord));
@@ -134,7 +134,7 @@ export function useCommitReveal(): UseCommitRevealReturn {
           client,
           prover,
           sessionWalletId,
-          arenaAccountId: ARENA_ACCOUNT_ID,
+          arenaAccountId: COMBAT_ACCOUNT_ID,
           note,
           consumeArgs: commitArgs,
         });
@@ -187,7 +187,7 @@ export function useCommitReveal(): UseCommitRevealReturn {
       const revealData = createReveal(commitDataRef.current);
 
       // Build reveal note (phase=1)
-      const note = await buildRevealNote(sessionWalletId, ARENA_ACCOUNT_ID);
+      const note = await buildRevealNote(sessionWalletId, COMBAT_ACCOUNT_ID);
 
       // Args: [encoded_move, nonce_p1, nonce_p2, 0]
       const revealArgs = new Word(
@@ -203,7 +203,7 @@ export function useCommitReveal(): UseCommitRevealReturn {
         client,
         prover,
         sessionWalletId,
-        arenaAccountId: ARENA_ACCOUNT_ID,
+        arenaAccountId: COMBAT_ACCOUNT_ID,
         note,
         consumeArgs: revealArgs,
       });

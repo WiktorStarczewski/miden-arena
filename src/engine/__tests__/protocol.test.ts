@@ -282,8 +282,8 @@ describe("matchmaking protocol", () => {
 // ---------------------------------------------------------------------------
 
 describe("draft protocol", () => {
-  it("draft pick amounts are in expected range [1, 10]", () => {
-    for (let id = 0; id <= 9; id++) {
+  it("draft pick amounts are in expected range [1, 8]", () => {
+    for (let id = 0; id <= 7; id++) {
       const amount = encodeDraftPick(id);
       expect(amount).toBeGreaterThanOrEqual(DRAFT_PICK_MIN);
       expect(amount).toBeLessThanOrEqual(DRAFT_PICK_MAX);

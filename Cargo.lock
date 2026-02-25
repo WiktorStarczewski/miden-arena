@@ -93,14 +93,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
-name = "arena_account"
-version = "0.1.0"
-dependencies = [
- "combat-engine",
- "miden",
-]
-
-[[package]]
 name = "arrayref"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -283,7 +275,7 @@ name = "combat-engine"
 version = "0.1.0"
 
 [[package]]
-name = "combat_test"
+name = "combat_account"
 version = "0.1.0"
 dependencies = [
  "combat-engine",
@@ -291,7 +283,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "combat_test_broken"
+name = "combat_test"
 version = "0.1.0"
 dependencies = [
  "combat-engine",
@@ -817,6 +809,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "init-combat-note"
+version = "0.1.0"
+dependencies = [
+ "miden",
+]
+
+[[package]]
 name = "inout"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1014,6 +1013,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d1525a2a28c7f4fa0fc98bb91ae755d1e2d1505079e05539e35bc876b5d65ae9"
 dependencies = [
  "regex-automata",
+]
+
+[[package]]
+name = "matchmaking_account"
+version = "0.1.0"
+dependencies = [
+ "miden",
 ]
 
 [[package]]
@@ -1728,6 +1734,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8fd00f0bb2e90d81d1044c2b32617f68fcb9fa3bb7640c23e9c748e53fb30934"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "process-result-note"
+version = "0.1.0"
+dependencies = [
+ "miden",
 ]
 
 [[package]]

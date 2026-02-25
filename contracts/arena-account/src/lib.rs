@@ -64,7 +64,7 @@ struct TurnAction {
 }
 
 fn decode_move(encoded: u32) -> TurnAction {
-    assert!(encoded >= 1 && encoded <= 20, "invalid encoded move");
+    assert!(encoded >= 1 && encoded <= 16, "invalid encoded move");
     TurnAction {
         champion_id: ((encoded - 1) / 2) as u8,
         ability_index: ((encoded - 1) % 2) as u8,
@@ -300,7 +300,7 @@ impl ArenaAccount {
         let c1_id = c1.as_u64() as u8;
         let c2_id = c2.as_u64() as u8;
 
-        assert!(c0_id <= 9 && c1_id <= 9 && c2_id <= 9, "invalid champion ID");
+        assert!(c0_id <= 7 && c1_id <= 7 && c2_id <= 7, "invalid champion ID");
         assert!(
             c0_id != c1_id && c0_id != c2_id && c1_id != c2_id,
             "duplicate champion"
@@ -437,7 +437,7 @@ impl ArenaAccount {
 
         // Validate move legality
         let em = encoded_move.as_u64() as u32;
-        assert!(em >= 1 && em <= 20, "move out of range");
+        assert!(em >= 1 && em <= 16, "move out of range");
 
         let action = decode_move(em);
         let team: Word = if is_player_a {
@@ -742,16 +742,6 @@ fn inline_execute_action(
             let (dmg, _) =
                 calculate_damage(actor_champ, target_champ, target_state, ability, actor_state);
             target_state.current_hp = target_state.current_hp.saturating_sub(dmg);
-            actor_state.total_damage_dealt = actor_state.total_damage_dealt.saturating_add(dmg);
-            if target_state.current_hp == 0 {
-                target_state.is_ko = true;
-            }
-        }
-        AbilityType::DamageDot => {
-            let (dmg, _) =
-                calculate_damage(actor_champ, target_champ, target_state, ability, actor_state);
-            target_state.current_hp = target_state.current_hp.saturating_sub(dmg);
-            actor_state.total_damage_dealt = actor_state.total_damage_dealt.saturating_add(dmg);
             if target_state.current_hp == 0 {
                 target_state.is_ko = true;
             }
@@ -768,44 +758,36 @@ fn inline_execute_action(
             };
             actor_state.current_hp = new_hp;
         }
-        AbilityType::Buff => {
+        AbilityType::StatMod => {
             if ability.stat_value > 0 && ability.duration > 0 {
                 let slot = BuffSlot {
                     stat: ability.stat,
                     value: ability.stat_value,
                     turns_remaining: ability.duration,
-                    is_debuff: false,
+                    is_debuff: ability.is_debuff,
                     active: true,
                 };
-                let mut inserted = false;
-                for i in 0..MAX_BUFFS {
-                    if !actor_state.buffs[i].active && !inserted {
-                        actor_state.buffs[i] = slot;
-                        actor_state.buff_count += 1;
-                        inserted = true;
+                if ability.is_debuff {
+                    let mut inserted = false;
+                    for i in 0..MAX_BUFFS {
+                        if !target_state.buffs[i].active && !inserted {
+                            target_state.buffs[i] = slot;
+                            target_state.buff_count += 1;
+                            inserted = true;
+                        }
                     }
-                }
-                assert!(inserted, "buff array full");
-            }
-        }
-        AbilityType::Debuff => {
-            if ability.stat_value > 0 && ability.duration > 0 {
-                let slot = BuffSlot {
-                    stat: ability.stat,
-                    value: ability.stat_value,
-                    turns_remaining: ability.duration,
-                    is_debuff: true,
-                    active: true,
-                };
-                let mut inserted = false;
-                for i in 0..MAX_BUFFS {
-                    if !target_state.buffs[i].active && !inserted {
-                        target_state.buffs[i] = slot;
-                        target_state.buff_count += 1;
-                        inserted = true;
+                    assert!(inserted, "buff array full");
+                } else {
+                    let mut inserted = false;
+                    for i in 0..MAX_BUFFS {
+                        if !actor_state.buffs[i].active && !inserted {
+                            actor_state.buffs[i] = slot;
+                            actor_state.buff_count += 1;
+                            inserted = true;
+                        }
                     }
+                    assert!(inserted, "buff array full");
                 }
-                assert!(inserted, "buff array full");
             }
         }
     }

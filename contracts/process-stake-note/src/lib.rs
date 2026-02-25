@@ -1,6 +1,6 @@
 //! Process Stake Note Script (Cross-Context)
 //!
-//! This note delivers a player's stake to the arena account and triggers join.
+//! This note delivers a player's stake to the matchmaking account and triggers join.
 //! Uses cross-context calling to invoke arena account procedures directly.
 
 #![no_std]
@@ -30,7 +30,7 @@ bindings::export!(ProcessStakeNote);
 
 use bindings::{
     exports::miden::base::note_script::Guest,
-    miden::arena_account::arena_account::{join, receive_asset},
+    miden::matchmaking_account::matchmaking_account::{join, receive_asset},
 };
 
 struct ProcessStakeNote;
@@ -44,7 +44,7 @@ impl Guest for ProcessStakeNote {
         let stake_asset = assets[0];
         let amount = stake_asset.inner[0];
 
-        // Deposit asset into arena vault
+        // Deposit asset into matchmaking vault
         receive_asset(stake_asset);
 
         // Register player

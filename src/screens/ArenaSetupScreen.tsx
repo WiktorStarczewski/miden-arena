@@ -15,7 +15,7 @@ import { useGameStore } from "../store/gameStore";
 import { useStaking } from "../hooks/useStaking";
 import { useArenaState } from "../hooks/useArenaState";
 import { buildTeamNote, submitArenaNote } from "../utils/arenaNote";
-import { ARENA_ACCOUNT_ID } from "../constants/miden";
+import { MATCHMAKING_ACCOUNT_ID } from "../constants/miden";
 import { getChampion } from "../constants/champions";
 
 // ---------------------------------------------------------------------------
@@ -114,7 +114,7 @@ export default function ArenaSetupScreen() {
     setError(null);
 
     try {
-      const note = await buildTeamNote(sessionWalletId, ARENA_ACCOUNT_ID);
+      const note = await buildTeamNote(sessionWalletId, MATCHMAKING_ACCOUNT_ID);
 
       // Champion IDs as bigints, 0-indexed
       const c0 = BigInt(myTeam[0] ?? 0);
@@ -126,7 +126,7 @@ export default function ArenaSetupScreen() {
         client,
         prover,
         sessionWalletId,
-        arenaAccountId: ARENA_ACCOUNT_ID,
+        arenaAccountId: MATCHMAKING_ACCOUNT_ID,
         note,
         consumeArgs: teamWord,
       });

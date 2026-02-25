@@ -56,11 +56,6 @@ pub fn calculate_damage(
     (damage, mult_x100)
 }
 
-/// Calculate burn tick damage: max_hp / 10, minimum 1.
-pub fn calculate_burn_damage(state: &ChampionState) -> u32 {
-    (state.max_hp / 10).max(1)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -185,7 +180,6 @@ mod tests {
         };
         ember_state.buff_count = 1;
 
-        // Use a low-power ability (construct one)
         let weak_ability = Ability {
             power: 1,
             ability_type: crate::types::AbilityType::Damage,
@@ -193,7 +187,7 @@ mod tests {
             stat_value: 0,
             duration: 0,
             heal_amount: 0,
-            applies_burn: false,
+            is_debuff: false,
         };
 
         let (damage, _) = calculate_damage(gale, ember, &ember_state, &weak_ability, &gale_state);
@@ -201,22 +195,9 @@ mod tests {
     }
 
     #[test]
-    fn burn_damage_90hp() {
-        let state = make_state(2); // Ember: 90 HP
-        assert_eq!(calculate_burn_damage(&state), 9);
-    }
-
-    #[test]
-    fn burn_damage_min_1() {
-        let mut state = make_state(0);
-        state.max_hp = 5;
-        assert_eq!(calculate_burn_damage(&state), 1);
-    }
-
-    #[test]
     fn all_matchups_produce_at_least_1_damage() {
-        for i in 0..10u8 {
-            for j in 0..10u8 {
+        for i in 0..8u8 {
+            for j in 0..8u8 {
                 let attacker = &CHAMPIONS[i as usize];
                 let defender = &CHAMPIONS[j as usize];
                 let def_state = make_state(j);
@@ -224,7 +205,7 @@ mod tests {
 
                 for ability in &attacker.abilities {
                     match ability.ability_type {
-                        crate::types::AbilityType::Damage | crate::types::AbilityType::DamageDot => {
+                        crate::types::AbilityType::Damage => {
                             let (damage, _) =
                                 calculate_damage(attacker, defender, &def_state, ability, &atk_state);
                             assert!(damage >= 1, "champion {} vs {} produced 0 damage", i, j);

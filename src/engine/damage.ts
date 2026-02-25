@@ -32,10 +32,3 @@ export function calculateDamage(
   const finalDamage = Math.max(1, Math.floor(baseDamage * typeMultiplier - effectiveDefense));
   return { damage: finalDamage, typeMultiplier };
 }
-
-/**
- * Calculate burn tick damage: 10% of max HP.
- */
-export function calculateBurnDamage(state: ChampionState): number {
-  return Math.max(1, Math.floor(state.maxHp * 0.1));
-}

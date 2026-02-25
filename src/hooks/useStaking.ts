@@ -12,7 +12,7 @@ import { useSend, useMiden } from "@miden-sdk/react";
 import { useGameStore } from "../store/gameStore";
 import { useArenaState } from "./useArenaState";
 import { buildStakeNote, submitArenaNote } from "../utils/arenaNote";
-import { MIDEN_FAUCET_ID, STAKE_AMOUNT, ARENA_ACCOUNT_ID } from "../constants/miden";
+import { MIDEN_FAUCET_ID, STAKE_AMOUNT, MATCHMAKING_ACCOUNT_ID } from "../constants/miden";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -75,13 +75,13 @@ export function useStaking(): UseStakingReturn {
     setError(null);
 
     try {
-      const note = await buildStakeNote(sessionWalletId, ARENA_ACCOUNT_ID);
+      const note = await buildStakeNote(sessionWalletId, MATCHMAKING_ACCOUNT_ID);
 
       await submitArenaNote({
         client,
         prover,
         sessionWalletId,
-        arenaAccountId: ARENA_ACCOUNT_ID,
+        arenaAccountId: MATCHMAKING_ACCOUNT_ID,
         note,
         consumeArgs: null,
       });

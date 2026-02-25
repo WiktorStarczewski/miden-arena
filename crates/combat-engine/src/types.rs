@@ -11,10 +11,8 @@ pub enum Element {
 #[repr(u8)]
 pub enum AbilityType {
     Damage = 0,
-    DamageDot = 1,
-    Heal = 2,
-    Buff = 3,
-    Debuff = 4,
+    Heal = 1,
+    StatMod = 2,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -33,7 +31,7 @@ pub struct Ability {
     pub stat_value: u32,
     pub duration: u32,
     pub heal_amount: u32,
-    pub applies_burn: bool,
+    pub is_debuff: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -47,7 +45,7 @@ pub struct Champion {
     pub abilities: [Ability; 2],
 }
 
-pub const MAX_BUFFS: usize = 8;
+pub const MAX_BUFFS: usize = 4;
 
 #[derive(Clone, Copy)]
 pub struct BuffSlot {
@@ -75,8 +73,8 @@ pub struct ChampionState {
     pub max_hp: u32,
     pub buffs: [BuffSlot; MAX_BUFFS],
     pub buff_count: u8,
-    pub burn_turns: u32,
     pub is_ko: bool,
+    #[cfg(feature = "track-damage")]
     pub total_damage_dealt: u32,
 }
 
@@ -86,8 +84,10 @@ pub struct TurnAction {
     pub ability_index: u8,
 }
 
+#[cfg(feature = "events")]
 pub const MAX_EVENTS: usize = 16;
 
+#[cfg(feature = "events")]
 #[derive(Clone, Copy)]
 pub enum TurnEvent {
     Attack {
@@ -113,20 +113,13 @@ pub enum TurnEvent {
         value: u32,
         duration: u32,
     },
-    BurnTick {
-        champion_id: u8,
-        damage: u32,
-    },
     Ko {
         champion_id: u8,
-    },
-    BurnApplied {
-        target_id: u8,
-        duration: u32,
     },
     None,
 }
 
+#[cfg(feature = "events")]
 #[derive(Clone, Copy)]
 pub struct TurnResult {
     pub state_a: ChampionState,
@@ -156,8 +149,8 @@ mod tests {
             max_hp: 100,
             buffs: [BuffSlot::EMPTY; MAX_BUFFS],
             buff_count: 0,
-            burn_turns: 0,
             is_ko: false,
+            #[cfg(feature = "track-damage")]
             total_damage_dealt: 0,
         };
         assert_eq!(state.id, 5);

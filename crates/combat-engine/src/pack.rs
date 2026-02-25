@@ -7,18 +7,18 @@ const GOLDILOCKS_P: u64 = 0xFFFF_FFFF_0000_0001;
 ///
 /// Layout:
 ///   felt0: (current_hp << 32) | max_hp
-///   felt1: (burn_turns << 33) | (is_ko << 32) | total_damage_dealt
+///   felt1: (is_ko << 32) [| total_damage_dealt if track-damage]
 ///   felt2: buffs 0-3 packed (4 x 16 bits, buff[0] in MSBs)
-///   felt3: buffs 4-7 packed (4 x 16 bits, buff[4] in MSBs)
+///   felt3: 0 (unused)
 ///
 /// `id` and `buff_count` are NOT packed — they are recovered during unpack.
 pub fn pack_champion_state(state: &ChampionState) -> [u64; 4] {
-    assert!(state.burn_turns < (1 << 31), "burn_turns exceeds 31 bits");
-
     let felt0 = ((state.current_hp as u64) << 32) | (state.max_hp as u64);
-    let felt1 = ((state.burn_turns as u64) << 33)
-        | ((state.is_ko as u64) << 32)
+    #[cfg(feature = "track-damage")]
+    let felt1 = ((state.is_ko as u64) << 32)
         | (state.total_damage_dealt as u64);
+    #[cfg(not(feature = "track-damage"))]
+    let felt1 = (state.is_ko as u64) << 32;
 
     assert!(felt0 < GOLDILOCKS_P, "felt0 overflow");
     assert!(felt1 < GOLDILOCKS_P, "felt1 overflow");
@@ -29,16 +29,9 @@ pub fn pack_champion_state(state: &ChampionState) -> [u64; 4] {
         felt2 |= (packed as u64) << ((3 - i) * 16);
     }
 
-    let mut felt3: u64 = 0;
-    for i in 0..4usize {
-        let packed = pack_single_buff(&state.buffs[4 + i]);
-        felt3 |= (packed as u64) << ((3 - i) * 16);
-    }
-
     assert!(felt2 < GOLDILOCKS_P, "buff felt2 overflow");
-    assert!(felt3 < GOLDILOCKS_P, "buff felt3 overflow");
 
-    [felt0, felt1, felt2, felt3]
+    [felt0, felt1, felt2, 0]
 }
 
 /// Unpack a ChampionState from 4 u64 values.
@@ -47,20 +40,13 @@ pub fn pack_champion_state(state: &ChampionState) -> [u64; 4] {
 pub fn unpack_champion_state(word: [u64; 4], champion_id: u8) -> ChampionState {
     let current_hp = (word[0] >> 32) as u32;
     let max_hp = word[0] as u32;
-    let burn_turns = (word[1] >> 33) as u32;
     let is_ko = ((word[1] >> 32) & 1) == 1;
-    let total_damage_dealt = word[1] as u32;
 
     let mut buffs = [BuffSlot::EMPTY; MAX_BUFFS];
 
     for i in 0..4usize {
         let bits = ((word[2] >> ((3 - i) * 16)) & 0xFFFF) as u16;
         buffs[i] = unpack_single_buff(bits);
-    }
-
-    for i in 0..4usize {
-        let bits = ((word[3] >> ((3 - i) * 16)) & 0xFFFF) as u16;
-        buffs[4 + i] = unpack_single_buff(bits);
     }
 
     let mut buff_count: u8 = 0;
@@ -76,9 +62,9 @@ pub fn unpack_champion_state(word: [u64; 4], champion_id: u8) -> ChampionState {
         max_hp,
         buffs,
         buff_count,
-        burn_turns,
         is_ko,
-        total_damage_dealt,
+        #[cfg(feature = "track-damage")]
+        total_damage_dealt: word[1] as u32,
     }
 }
 
@@ -124,7 +110,7 @@ mod tests {
 
     #[test]
     fn roundtrip_fresh_champion() {
-        for id in 0..10u8 {
+        for id in 0..8u8 {
             let state = init_champion_state(id);
             let packed = pack_champion_state(&state);
             let unpacked = unpack_champion_state(packed, id);
@@ -132,19 +118,19 @@ mod tests {
             assert_eq!(unpacked.id, state.id);
             assert_eq!(unpacked.current_hp, state.current_hp);
             assert_eq!(unpacked.max_hp, state.max_hp);
-            assert_eq!(unpacked.burn_turns, state.burn_turns);
             assert_eq!(unpacked.is_ko, state.is_ko);
+            #[cfg(feature = "track-damage")]
             assert_eq!(unpacked.total_damage_dealt, state.total_damage_dealt);
             assert_eq!(unpacked.buff_count, state.buff_count);
         }
     }
 
     #[test]
-    fn roundtrip_with_buffs_burn_damage() {
+    fn roundtrip_with_buffs_and_damage() {
         let mut state = init_champion_state(0); // Inferno, HP 80
         state.current_hp = 45;
-        state.burn_turns = 2;
-        state.total_damage_dealt = 137;
+        #[cfg(feature = "track-damage")]
+        { state.total_damage_dealt = 137; }
         state.buffs[0] = BuffSlot {
             stat: StatType::Defense,
             value: 6,
@@ -159,7 +145,7 @@ mod tests {
             is_debuff: true,
             active: true,
         };
-        state.buffs[5] = BuffSlot {
+        state.buffs[2] = BuffSlot {
             stat: StatType::Speed,
             value: 5,
             turns_remaining: 3,
@@ -173,7 +159,7 @@ mod tests {
 
         assert_eq!(unpacked.current_hp, 45);
         assert_eq!(unpacked.max_hp, 80);
-        assert_eq!(unpacked.burn_turns, 2);
+        #[cfg(feature = "track-damage")]
         assert_eq!(unpacked.total_damage_dealt, 137);
         assert_eq!(unpacked.buff_count, 3);
         assert!(!unpacked.is_ko);
@@ -192,40 +178,38 @@ mod tests {
         assert_eq!(unpacked.buffs[1].turns_remaining, 1);
         assert!(unpacked.buffs[1].is_debuff);
 
-        // Check buff 5 (in felt3)
-        assert!(unpacked.buffs[5].active);
-        assert_eq!(unpacked.buffs[5].stat, StatType::Speed);
-        assert_eq!(unpacked.buffs[5].value, 5);
-        assert_eq!(unpacked.buffs[5].turns_remaining, 3);
-        assert!(!unpacked.buffs[5].is_debuff);
+        // Check buff 2
+        assert!(unpacked.buffs[2].active);
+        assert_eq!(unpacked.buffs[2].stat, StatType::Speed);
+        assert_eq!(unpacked.buffs[2].value, 5);
+        assert_eq!(unpacked.buffs[2].turns_remaining, 3);
+        assert!(!unpacked.buffs[2].is_debuff);
 
         // Inactive slots should be empty
-        assert!(!unpacked.buffs[2].active);
         assert!(!unpacked.buffs[3].active);
-        assert!(!unpacked.buffs[4].active);
-        assert!(!unpacked.buffs[6].active);
-        assert!(!unpacked.buffs[7].active);
     }
 
     #[test]
     fn roundtrip_ko_champion() {
-        let mut state = init_champion_state(8); // Phoenix, HP 65
+        let mut state = init_champion_state(7); // Storm, HP 85
         state.current_hp = 0;
         state.is_ko = true;
-        state.total_damage_dealt = 250;
+        #[cfg(feature = "track-damage")]
+        { state.total_damage_dealt = 250; }
 
         let packed = pack_champion_state(&state);
-        let unpacked = unpack_champion_state(packed, 8);
+        let unpacked = unpack_champion_state(packed, 7);
 
         assert_eq!(unpacked.current_hp, 0);
         assert!(unpacked.is_ko);
+        #[cfg(feature = "track-damage")]
         assert_eq!(unpacked.total_damage_dealt, 250);
-        assert_eq!(unpacked.max_hp, 65);
+        assert_eq!(unpacked.max_hp, 85);
     }
 
     #[test]
-    fn all_10_champions_roundtrip() {
-        for id in 0..10u8 {
+    fn all_8_champions_roundtrip() {
+        for id in 0..8u8 {
             let state = init_champion_state(id);
             let packed = pack_champion_state(&state);
             let unpacked = unpack_champion_state(packed, id);
@@ -239,8 +223,8 @@ mod tests {
     #[test]
     fn buff_count_recomputed_correctly() {
         let mut state = init_champion_state(3);
-        // Set 4 active buffs in various slots
-        for i in [0, 2, 4, 7] {
+        // Set 3 active buffs in various slots
+        for i in [0, 1, 3] {
             state.buffs[i] = BuffSlot {
                 stat: StatType::Defense,
                 value: 3,
@@ -249,11 +233,11 @@ mod tests {
                 active: true,
             };
         }
-        state.buff_count = 4;
+        state.buff_count = 3;
 
         let packed = pack_champion_state(&state);
         let unpacked = unpack_champion_state(packed, 3);
-        assert_eq!(unpacked.buff_count, 4);
+        assert_eq!(unpacked.buff_count, 3);
     }
 
     #[test]
@@ -275,13 +259,5 @@ mod tests {
         assert_eq!(unpacked.buffs[0].turns_remaining, 15);
         assert!(unpacked.buffs[0].is_debuff);
         assert_eq!(unpacked.buffs[0].stat, StatType::Attack);
-    }
-
-    #[test]
-    #[should_panic(expected = "burn_turns exceeds 31 bits")]
-    fn overflow_burn_turns() {
-        let mut state = init_champion_state(0);
-        state.burn_turns = 1 << 31; // exceeds 31-bit limit
-        pack_champion_state(&state);
     }
 }

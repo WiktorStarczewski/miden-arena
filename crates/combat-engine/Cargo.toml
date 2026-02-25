@@ -2,3 +2,9 @@
 name = "combat-engine"
 version = "0.1.0"
 edition = "2021"
+
+[features]
+default = ["track-damage", "events", "resolve-mut"]
+track-damage = []
+events = []
+resolve-mut = []

@@ -1,6 +1,6 @@
 //! Submit Move Note Script (Cross-Context)
 //!
-//! This note delivers a player's commit or reveal to the arena account.
+//! This note delivers a player's commit or reveal to the combat account.
 //! Note inputs: [0] = phase (0=commit, 1=reveal)
 //! Commit: arg = [commit_a, commit_b, commit_c, commit_d]
 //! Reveal: arg = [encoded_move, nonce_p1, nonce_p2, 0]
@@ -33,7 +33,7 @@ bindings::export!(SubmitMoveNote);
 
 use bindings::{
     exports::miden::base::note_script::Guest,
-    miden::arena_account::arena_account::{submit_commit, submit_reveal},
+    miden::combat_account::combat_account::{submit_commit, submit_reveal},
 };
 
 struct SubmitMoveNote;

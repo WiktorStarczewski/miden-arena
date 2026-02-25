@@ -3,14 +3,14 @@ import { resolveTurn, initChampionState, isTeamEliminated } from "../combat";
 
 describe("initChampionState", () => {
   it("initializes correctly for each champion", () => {
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 8; i++) {
       const state = initChampionState(i);
       expect(state.id).toBe(i);
       expect(state.currentHp).toBe(state.maxHp);
       expect(state.currentHp).toBeGreaterThan(0);
       expect(state.isKO).toBe(false);
       expect(state.buffs).toEqual([]);
-      expect(state.burnTurns).toBe(0);
+      expect(state.isKO).toBe(false);
     }
   });
 });
@@ -115,48 +115,25 @@ describe("resolveTurn", () => {
     expect(ember.buffs[0].turnsRemaining).toBe(1);
   });
 
-  it("applies burn correctly", () => {
-    const myChamps = [initChampionState(0)]; // Inferno (id 0, Fire)
-    const oppChamps = [initChampionState(1)]; // Boulder (id 1, Earth)
-
-    const { opponentChampions, events } = resolveTurn(
-      myChamps,
-      oppChamps,
-      { championId: 0, abilityIndex: 1 }, // Scorch (15 dmg + burn 3 turns)
-      { championId: 1, abilityIndex: 0 }, // Rock Slam
-    );
-
-    const burnApplied = events.find((e) => e.type === "burn_applied");
-    const burnTick = events.find((e) => e.type === "burn_tick");
-
-    // Burn should be applied and tick once
-    expect(burnApplied).toBeDefined();
-    expect(burnTick).toBeDefined();
-
-    const boulder = opponentChampions.find((c) => c.id === 1)!;
-    // Burn should have 2 turns left (3 applied, 1 ticked)
-    expect(boulder.burnTurns).toBe(2);
-  });
-
   it("KO prevents second attack", () => {
-    // Phoenix (id 8, ATK 22, SPD 17) using Blaze (38 power) vs Gale (id 4, HP 75, DEF 6)
-    const myChamps = [initChampionState(8)]; // Phoenix
-    const oppChamps = [initChampionState(4)]; // Gale
+    // Storm (id 7, ATK 17, SPD 15) using Lightning (30 power) vs Boulder (id 1, HP 140, DEF 16)
+    const myChamps = [initChampionState(7)]; // Storm
+    const oppChamps = [initChampionState(1)]; // Boulder
 
-    // Reduce Gale's HP to make KO likely
-    oppChamps[0].currentHp = 10;
+    // Reduce Boulder's HP to make KO likely
+    oppChamps[0].currentHp = 1;
 
     const { events } = resolveTurn(
       myChamps,
       oppChamps,
-      { championId: 8, abilityIndex: 0 }, // Blaze (38 power)
-      { championId: 4, abilityIndex: 0 }, // Wind Blade
+      { championId: 7, abilityIndex: 0 }, // Lightning (30 power)
+      { championId: 1, abilityIndex: 0 }, // Rock Slam
     );
 
     const koEvent = events.find((e) => e.type === "ko");
     expect(koEvent).toBeDefined();
 
-    // If Phoenix is faster and KOs Gale, Gale should not attack
+    // If Storm is faster and KOs Boulder, Boulder should not attack
     const attacks = events.filter((e) => e.type === "attack");
     // At most 1 attack if KO happened
     if (koEvent) {

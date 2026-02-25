@@ -16,7 +16,7 @@ package = "miden:submit-move-note"
 project-kind = "note-script"
 
 [package.metadata.miden.dependencies]
-"miden:arena-account" = { path = "../arena-account" }
+"miden:combat-account" = { path = "../combat-account" }
 
 [package.metadata.component.target.dependencies]
-"miden:arena-account" = { path = "../arena-account/wit/miden-arena-account.wit" }
+"miden:combat-account" = { path = "../combat-account/wit/miden-combat-account.wit" }

@@ -64,14 +64,11 @@ function FighterPanel({
       />
 
       {/* Status effects */}
-      {(championState.buffs.length > 0 || championState.burnTurns > 0) && (
+      {championState.buffs.length > 0 && (
         <div className="flex flex-wrap gap-1 mt-2">
           {championState.buffs.map((buff, i) => (
             <StatusEffectIcon key={`buff-${i}`} buff={buff} />
           ))}
-          {championState.burnTurns > 0 && (
-            <StatusEffectIcon isBurn burnTurns={championState.burnTurns} />
-          )}
         </div>
       )}
     </GlassPanel>

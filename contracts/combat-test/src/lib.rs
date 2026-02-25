@@ -3,8 +3,8 @@
 
 use combat_engine::combat::init_champion_state;
 use combat_engine::champions::get_champion;
-use combat_engine::damage::{calculate_damage, calculate_burn_damage, sum_buffs};
-use combat_engine::types::{AbilityType, ChampionState, StatType, TurnAction};
+use combat_engine::damage::{calculate_damage, sum_buffs};
+use combat_engine::types::{StatType};
 
 #[cfg(not(test))]
 #[panic_handler]
@@ -44,44 +44,26 @@ pub fn entrypoint() -> i32 {
             // Storm attacks Quake
             let (dmg, _) = calculate_damage(champ_a, champ_b, &quake, ability_a, &storm);
             quake.current_hp = quake.current_hp.saturating_sub(dmg);
-            storm.total_damage_dealt += dmg;
             if quake.current_hp == 0 { quake.is_ko = true; }
 
             // Quake attacks Storm (if alive)
             if !quake.is_ko {
                 let (dmg, _) = calculate_damage(champ_b, champ_a, &storm, ability_b, &quake);
                 storm.current_hp = storm.current_hp.saturating_sub(dmg);
-                quake.total_damage_dealt += dmg;
                 if storm.current_hp == 0 { storm.is_ko = true; }
             }
         } else {
             // Quake attacks Storm
             let (dmg, _) = calculate_damage(champ_b, champ_a, &storm, ability_b, &quake);
             storm.current_hp = storm.current_hp.saturating_sub(dmg);
-            quake.total_damage_dealt += dmg;
             if storm.current_hp == 0 { storm.is_ko = true; }
 
             // Storm attacks Quake (if alive)
             if !storm.is_ko {
                 let (dmg, _) = calculate_damage(champ_a, champ_b, &quake, ability_a, &storm);
                 quake.current_hp = quake.current_hp.saturating_sub(dmg);
-                storm.total_damage_dealt += dmg;
                 if quake.current_hp == 0 { quake.is_ko = true; }
             }
-        }
-
-        // Burn ticks
-        if storm.burn_turns > 0 && !storm.is_ko {
-            let bd = calculate_burn_damage(&storm);
-            storm.current_hp = storm.current_hp.saturating_sub(bd);
-            storm.burn_turns -= 1;
-            if storm.current_hp == 0 { storm.is_ko = true; }
-        }
-        if quake.burn_turns > 0 && !quake.is_ko {
-            let bd = calculate_burn_damage(&quake);
-            quake.current_hp = quake.current_hp.saturating_sub(bd);
-            quake.burn_turns -= 1;
-            if quake.current_hp == 0 { quake.is_ko = true; }
         }
     }
 

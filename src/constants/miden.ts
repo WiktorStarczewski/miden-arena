@@ -16,4 +16,4 @@ export const RECALL_BLOCK_OFFSET = 200;
 /** Minimal token amount for protocol notes (commit/reveal) to avoid wallet drain. */
 export const PROTOCOL_NOTE_AMOUNT = 1n;
 
-export { ARENA_ACCOUNT_ID, NOTE_SCRIPTS } from "./contracts";
+export { MATCHMAKING_ACCOUNT_ID, COMBAT_ACCOUNT_ID, ARENA_ACCOUNT_ID, NOTE_SCRIPTS } from "./contracts";

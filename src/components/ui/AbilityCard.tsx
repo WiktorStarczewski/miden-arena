@@ -13,17 +13,13 @@ interface AbilityCardProps {
 const TYPE_ICONS: Record<Ability["type"], string> = {
   damage: "\u2694",       // crossed swords
   heal: "\u2661",         // heart
-  buff: "\u2191",         // up arrow
-  debuff: "\u2193",       // down arrow
-  damage_dot: "\u2622",   // radioactive / burn
+  stat_mod: "\u2191",     // up arrow (buffs/debuffs)
 };
 
 const TYPE_COLORS: Record<Ability["type"], string> = {
   damage: "text-red-400",
   heal: "text-emerald-400",
-  buff: "text-sky-400",
-  debuff: "text-purple-400",
-  damage_dot: "text-orange-400",
+  stat_mod: "text-sky-400",
 };
 
 export default function AbilityCard({
@@ -105,11 +101,6 @@ export default function AbilityCard({
           {ability.healAmount && ability.healAmount > 0 && (
             <span className="text-[9px] text-emerald-400 px-1.5 py-0.5 rounded bg-emerald-400/10">
               +{ability.healAmount} HP
-            </span>
-          )}
-          {ability.appliesBurn && (
-            <span className="text-[9px] text-orange-400 px-1.5 py-0.5 rounded bg-orange-400/10">
-              Burn
             </span>
           )}
         </div>

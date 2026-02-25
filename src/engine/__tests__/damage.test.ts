@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { calculateDamage, calculateBurnDamage } from "../damage";
+import { calculateDamage } from "../damage";
 import { CHAMPIONS } from "../../constants/champions";
 import type { ChampionState } from "../../types";
 
@@ -10,7 +10,6 @@ function makeState(championId: number): ChampionState {
     currentHp: champ.hp,
     maxHp: champ.hp,
     buffs: [],
-    burnTurns: 0,
     isKO: false,
     totalDamageDealt: 0,
   };
@@ -133,15 +132,15 @@ describe("calculateDamage", () => {
     expect(damage).toBe(1);
   });
 
-  it("covers all 100 champion matchups without errors", () => {
-    for (let i = 0; i < 10; i++) {
-      for (let j = 0; j < 10; j++) {
+  it("covers all 64 champion matchups without errors", () => {
+    for (let i = 0; i < 8; i++) {
+      for (let j = 0; j < 8; j++) {
         const attacker = CHAMPIONS[i];
         const defender = CHAMPIONS[j];
         const defState = makeState(j);
 
         for (const ability of attacker.abilities) {
-          if (ability.type === "damage" || ability.type === "damage_dot") {
+          if (ability.type === "damage") {
             const { damage, typeMultiplier } = calculateDamage(
               attacker,
               defender,
@@ -158,15 +157,3 @@ describe("calculateDamage", () => {
   });
 });
 
-describe("calculateBurnDamage", () => {
-  it("calculates 10% of max HP", () => {
-    const state = makeState(2); // Ember: 90 HP
-    expect(calculateBurnDamage(state)).toBe(9);
-  });
-
-  it("ensures minimum 1 burn damage", () => {
-    const state = makeState(0);
-    state.maxHp = 5;
-    expect(calculateBurnDamage(state)).toBe(1);
-  });
-});

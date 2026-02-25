@@ -80,16 +80,6 @@ const THEMES: Record<number, ThemeConfig> = {
     particleColor: "#aabbff", particleCount: 120, particleSize: 0.025,
     particleSpeed: 1.0, particleDirection: "down",
   },
-  8: { // Phoenix
-    element: "fire", topColor: "#0a0800", bottomColor: "#2a2008",
-    particleColor: "#ffdd66", particleCount: 150, particleSize: 0.03,
-    particleSpeed: 0.7, particleDirection: "up",
-  },
-  9: { // Kraken
-    element: "water", topColor: "#020004", bottomColor: "#0a0418",
-    particleColor: "#8844ff", particleCount: 80, particleSize: 0.045,
-    particleSpeed: 0.15, particleDirection: "random",
-  },
 };
 
 const DEFAULT_THEME: ThemeConfig = {

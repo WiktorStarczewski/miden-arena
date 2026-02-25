@@ -1,10 +1,16 @@
 use crate::champions::get_champion;
-use crate::damage::{calculate_burn_damage, calculate_damage, sum_buffs};
+#[cfg(any(feature = "events", feature = "resolve-mut"))]
+use crate::damage::{calculate_damage, sum_buffs};
 use crate::types::{
-    AbilityType, BuffSlot, Champion, ChampionState, StatType, TurnAction, TurnEvent, TurnResult,
-    MAX_BUFFS, MAX_EVENTS,
+    BuffSlot, ChampionState,
+    MAX_BUFFS,
 };
+#[cfg(any(feature = "events", feature = "resolve-mut"))]
+use crate::types::{AbilityType, Champion, StatType, TurnAction};
+#[cfg(feature = "events")]
+use crate::types::{TurnEvent, TurnResult, MAX_EVENTS};
 
+#[cfg(feature = "events")]
 /// Resolve a single combat round between two champions.
 pub fn resolve_turn(
     state_a: &ChampionState,
@@ -40,10 +46,6 @@ pub fn resolve_turn(
         }
     }
 
-    // Burn ticks (deterministic order: A then B)
-    process_burn_tick(&mut a, &mut events, &mut event_count);
-    process_burn_tick(&mut b, &mut events, &mut event_count);
-
     // Tick down buff durations
     tick_buffs(&mut a);
     tick_buffs(&mut b);
@@ -56,6 +58,7 @@ pub fn resolve_turn(
     }
 }
 
+#[cfg(feature = "events")]
 fn execute_action(
     actor_champ: &Champion,
     actor_state: &mut ChampionState,
@@ -72,7 +75,8 @@ fn execute_action(
             let (damage, mult_x100) =
                 calculate_damage(actor_champ, target_champ, target_state, ability, actor_state);
             target_state.current_hp = target_state.current_hp.saturating_sub(damage);
-            actor_state.total_damage_dealt += damage;
+            #[cfg(feature = "track-damage")]
+            { actor_state.total_damage_dealt += damage; }
             push_event(
                 events,
                 event_count,
@@ -90,44 +94,6 @@ fn execute_action(
                     event_count,
                     TurnEvent::Ko {
                         champion_id: target_champ.id,
-                    },
-                );
-            }
-        }
-        AbilityType::DamageDot => {
-            let (damage, mult_x100) =
-                calculate_damage(actor_champ, target_champ, target_state, ability, actor_state);
-            target_state.current_hp = target_state.current_hp.saturating_sub(damage);
-            actor_state.total_damage_dealt += damage;
-            push_event(
-                events,
-                event_count,
-                TurnEvent::Attack {
-                    attacker_id: actor_champ.id,
-                    defender_id: target_champ.id,
-                    damage,
-                    mult_x100,
-                },
-            );
-            if target_state.current_hp == 0 {
-                target_state.is_ko = true;
-                push_event(
-                    events,
-                    event_count,
-                    TurnEvent::Ko {
-                        champion_id: target_champ.id,
-                    },
-                );
-            }
-            // Apply burn if target survived
-            if ability.applies_burn && ability.duration > 0 && !target_state.is_ko {
-                target_state.burn_turns = ability.duration;
-                push_event(
-                    events,
-                    event_count,
-                    TurnEvent::BurnApplied {
-                        target_id: target_champ.id,
-                        duration: ability.duration,
                     },
                 );
             }
@@ -150,83 +116,46 @@ fn execute_action(
                 },
             );
         }
-        AbilityType::Buff => {
+        AbilityType::StatMod => {
             if ability.stat_value > 0 && ability.duration > 0 {
                 let slot = BuffSlot {
                     stat: ability.stat,
                     value: ability.stat_value,
                     turns_remaining: ability.duration,
-                    is_debuff: false,
+                    is_debuff: ability.is_debuff,
                     active: true,
                 };
-                insert_buff(actor_state, slot);
-                push_event(
-                    events,
-                    event_count,
-                    TurnEvent::Buff {
-                        champion_id: actor_champ.id,
-                        stat: ability.stat,
-                        value: ability.stat_value,
-                        duration: ability.duration,
-                    },
-                );
-            }
-        }
-        AbilityType::Debuff => {
-            if ability.stat_value > 0 && ability.duration > 0 {
-                let slot = BuffSlot {
-                    stat: ability.stat,
-                    value: ability.stat_value,
-                    turns_remaining: ability.duration,
-                    is_debuff: true,
-                    active: true,
-                };
-                insert_buff(target_state, slot);
-                push_event(
-                    events,
-                    event_count,
-                    TurnEvent::Debuff {
-                        target_id: target_champ.id,
-                        stat: ability.stat,
-                        value: ability.stat_value,
-                        duration: ability.duration,
-                    },
-                );
+                if ability.is_debuff {
+                    insert_buff(target_state, slot);
+                    push_event(
+                        events,
+                        event_count,
+                        TurnEvent::Debuff {
+                            target_id: target_champ.id,
+                            stat: ability.stat,
+                            value: ability.stat_value,
+                            duration: ability.duration,
+                        },
+                    );
+                } else {
+                    insert_buff(actor_state, slot);
+                    push_event(
+                        events,
+                        event_count,
+                        TurnEvent::Buff {
+                            champion_id: actor_champ.id,
+                            stat: ability.stat,
+                            value: ability.stat_value,
+                            duration: ability.duration,
+                        },
+                    );
+                }
             }
         }
     }
 }
 
-fn process_burn_tick(
-    state: &mut ChampionState,
-    events: &mut [TurnEvent; MAX_EVENTS],
-    event_count: &mut u8,
-) {
-    if state.burn_turns > 0 && !state.is_ko {
-        let burn_damage = calculate_burn_damage(state);
-        state.current_hp = state.current_hp.saturating_sub(burn_damage);
-        push_event(
-            events,
-            event_count,
-            TurnEvent::BurnTick {
-                champion_id: state.id,
-                damage: burn_damage,
-            },
-        );
-        state.burn_turns -= 1;
-        if state.current_hp == 0 {
-            state.is_ko = true;
-            push_event(
-                events,
-                event_count,
-                TurnEvent::Ko {
-                    champion_id: state.id,
-                },
-            );
-        }
-    }
-}
-
+#[cfg(any(feature = "events", feature = "resolve-mut"))]
 fn tick_buffs(state: &mut ChampionState) {
     for i in 0..MAX_BUFFS {
         if state.buffs[i].active {
@@ -239,6 +168,7 @@ fn tick_buffs(state: &mut ChampionState) {
     }
 }
 
+#[cfg(any(feature = "events", feature = "resolve-mut"))]
 fn insert_buff(state: &mut ChampionState, slot: BuffSlot) {
     for i in 0..MAX_BUFFS {
         if !state.buffs[i].active {
@@ -251,6 +181,7 @@ fn insert_buff(state: &mut ChampionState, slot: BuffSlot) {
     panic!("buff array full — MAX_BUFFS exceeded");
 }
 
+#[cfg(feature = "events")]
 fn push_event(events: &mut [TurnEvent; MAX_EVENTS], count: &mut u8, event: TurnEvent) {
     debug_assert!(
         (*count as usize) < MAX_EVENTS,
@@ -262,6 +193,7 @@ fn push_event(events: &mut [TurnEvent; MAX_EVENTS], count: &mut u8, event: TurnE
     }
 }
 
+#[cfg(feature = "resolve-mut")]
 /// Miden-friendly variant of resolve_turn that mutates states in place.
 /// Avoids the large TurnResult struct return which triggers a compiler bug
 /// in the Miden WASM→MASM pipeline. Returns the number of events that occurred.
@@ -298,10 +230,6 @@ pub fn resolve_turn_mut(
         }
     }
 
-    // Burn ticks
-    event_count += process_burn_tick_mut(state_a);
-    event_count += process_burn_tick_mut(state_b);
-
     // Tick down buff durations
     tick_buffs(state_a);
     tick_buffs(state_b);
@@ -309,6 +237,7 @@ pub fn resolve_turn_mut(
     event_count
 }
 
+#[cfg(feature = "resolve-mut")]
 fn execute_action_mut(
     actor_champ: &Champion,
     actor_state: &mut ChampionState,
@@ -324,25 +253,11 @@ fn execute_action_mut(
             let (damage, _) =
                 calculate_damage(actor_champ, target_champ, target_state, ability, actor_state);
             target_state.current_hp = target_state.current_hp.saturating_sub(damage);
-            actor_state.total_damage_dealt += damage;
+            #[cfg(feature = "track-damage")]
+            { actor_state.total_damage_dealt += damage; }
             events += 1;
             if target_state.current_hp == 0 {
                 target_state.is_ko = true;
-                events += 1;
-            }
-        }
-        AbilityType::DamageDot => {
-            let (damage, _) =
-                calculate_damage(actor_champ, target_champ, target_state, ability, actor_state);
-            target_state.current_hp = target_state.current_hp.saturating_sub(damage);
-            actor_state.total_damage_dealt += damage;
-            events += 1;
-            if target_state.current_hp == 0 {
-                target_state.is_ko = true;
-                events += 1;
-            }
-            if ability.applies_burn && ability.duration > 0 && !target_state.is_ko {
-                target_state.burn_turns = ability.duration;
                 events += 1;
             }
         }
@@ -356,48 +271,25 @@ fn execute_action_mut(
             actor_state.current_hp = new_hp;
             events += 1;
         }
-        AbilityType::Buff => {
+        AbilityType::StatMod => {
             if ability.stat_value > 0 && ability.duration > 0 {
                 let slot = BuffSlot {
                     stat: ability.stat,
                     value: ability.stat_value,
                     turns_remaining: ability.duration,
-                    is_debuff: false,
+                    is_debuff: ability.is_debuff,
                     active: true,
                 };
-                insert_buff(actor_state, slot);
-                events += 1;
-            }
-        }
-        AbilityType::Debuff => {
-            if ability.stat_value > 0 && ability.duration > 0 {
-                let slot = BuffSlot {
-                    stat: ability.stat,
-                    value: ability.stat_value,
-                    turns_remaining: ability.duration,
-                    is_debuff: true,
-                    active: true,
-                };
-                insert_buff(target_state, slot);
+                if ability.is_debuff {
+                    insert_buff(target_state, slot);
+                } else {
+                    insert_buff(actor_state, slot);
+                }
                 events += 1;
             }
         }
     }
     events
-}
-
-fn process_burn_tick_mut(state: &mut ChampionState) -> u8 {
-    if state.burn_turns > 0 && !state.is_ko {
-        let burn_damage = calculate_burn_damage(state);
-        state.current_hp = state.current_hp.saturating_sub(burn_damage);
-        state.burn_turns -= 1;
-        if state.current_hp == 0 {
-            state.is_ko = true;
-            return 2; // burn tick + KO
-        }
-        return 1; // burn tick only
-    }
-    0
 }
 
 /// Initialize champion combat state from champion definition.
@@ -409,8 +301,8 @@ pub fn init_champion_state(champion_id: u8) -> ChampionState {
         max_hp: champ.hp,
         buffs: [BuffSlot::EMPTY; MAX_BUFFS],
         buff_count: 0,
-        burn_turns: 0,
         is_ko: false,
+        #[cfg(feature = "track-damage")]
         total_damage_dealt: 0,
     }
 }
@@ -420,9 +312,10 @@ pub fn is_team_eliminated(states: &[ChampionState; 3]) -> bool {
     states[0].is_ko && states[1].is_ko && states[2].is_ko
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "events", feature = "track-damage"))]
 mod tests {
     use super::*;
+    use crate::types::{TurnEvent, TurnResult};
 
     // Helper to find the first event matching a pattern
     fn find_event<F>(result: &TurnResult, pred: F) -> Option<TurnEvent>
@@ -451,15 +344,14 @@ mod tests {
     }
 
     #[test]
-    fn init_champion_state_all_10() {
-        for i in 0..10u8 {
+    fn init_champion_state_all_8() {
+        for i in 0..8u8 {
             let state = init_champion_state(i);
             assert_eq!(state.id, i);
             assert_eq!(state.current_hp, state.max_hp);
             assert!(state.current_hp > 0);
             assert!(!state.is_ko);
             assert_eq!(state.buff_count, 0);
-            assert_eq!(state.burn_turns, 0);
         }
     }
 
@@ -588,43 +480,17 @@ mod tests {
     }
 
     #[test]
-    fn burn_application_and_tick() {
-        // Inferno (id 0, SPD 16) uses Scorch (burn 3 turns) vs Boulder (id 1, SPD 5)
-        let inferno = init_champion_state(0);
-        let boulder = init_champion_state(1);
-
-        let result = resolve_turn(
-            &inferno,
-            &boulder,
-            &TurnAction { champion_id: 0, ability_index: 1 }, // Scorch
-            &TurnAction { champion_id: 1, ability_index: 0 }, // Rock Slam
-        );
-
-        let burn_applied = find_event(&result, |e| matches!(e, TurnEvent::BurnApplied { .. }));
-        let burn_tick = find_event(&result, |e| matches!(e, TurnEvent::BurnTick { .. }));
-
-        assert!(burn_applied.is_some());
-        assert!(burn_tick.is_some());
-
-        // Boulder should have 2 burn turns left (3 applied, 1 ticked)
-        assert_eq!(result.state_b.burn_turns, 2);
-    }
-
-    #[test]
     fn ko_prevents_second_attack() {
-        // Phoenix (id 8, SPD 17) uses Blaze vs Gale (id 4, HP 75, SPD 18)
-        // Gale is faster but we reduce HP to 10 so Phoenix KOs after Gale
-        // Actually Phoenix SPD 17 < Gale SPD 18, so Gale goes first
-        // Let's use Phoenix vs a slow champion with low HP
-        let phoenix = init_champion_state(8);
+        // Storm (id 7, SPD 15) vs Boulder (id 1, SPD 5) with very low HP
+        let storm = init_champion_state(7);
         let mut boulder = init_champion_state(1);
         boulder.current_hp = 1; // Very low HP
 
-        // Phoenix SPD 17 > Boulder SPD 5, so Phoenix goes first and KOs Boulder
+        // Storm SPD 15 > Boulder SPD 5, so Storm goes first and KOs Boulder
         let result = resolve_turn(
-            &phoenix,
+            &storm,
             &boulder,
-            &TurnAction { champion_id: 8, ability_index: 0 }, // Blaze
+            &TurnAction { champion_id: 7, ability_index: 0 }, // Lightning
             &TurnAction { champion_id: 1, ability_index: 0 }, // Rock Slam
         );
 
@@ -634,7 +500,7 @@ mod tests {
         // Boulder should be KO'd
         assert!(result.state_b.is_ko);
 
-        // Only 1 attack should have happened (Phoenix's)
+        // Only 1 attack should have happened (Storm's)
         let attacks = count_events(&result, |e| matches!(e, TurnEvent::Attack { .. }));
         assert_eq!(attacks, 1);
     }
@@ -674,18 +540,12 @@ mod tests {
     // ---------------------------------------------------------------
     // Full happy-path: 3v3 battle played to completion
     // ---------------------------------------------------------------
-    // Team A: Phoenix (8), Ember (2), Torrent (3)
+    // Team A: Storm (7), Ember (2), Torrent (3)
     // Team B: Boulder (1), Tide (5), Gale (4)
-    //
-    // We simulate a complete match where each team sends one champion
-    // at a time, chain resolve_turn calls, swap in the next champion
-    // when one is KO'd, and run until one team is fully eliminated.
-    // Along the way we exercise: damage, buffs, debuffs, heals, burn,
-    // KO mid-round, and is_team_eliminated.
     #[test]
     fn full_3v3_battle_to_completion() {
         let mut team_a = [
-            init_champion_state(8), // Phoenix: Fire, HP 65, ATK 22, SPD 17
+            init_champion_state(7), // Storm:   Wind, HP 85, ATK 17, SPD 15
             init_champion_state(2), // Ember:   Fire, HP 90, ATK 16, SPD 14
             init_champion_state(3), // Torrent: Water, HP 110, ATK 12, SPD 10
         ];
@@ -708,12 +568,12 @@ mod tests {
             let active_b = &team_b[idx_b];
 
             // Pick actions — use ability 0 (damage) most of the time.
-            // Sprinkle in ability 1 to exercise buffs/heals/burns:
-            //   Round 1: Phoenix uses Rebirth (heal), Boulder uses Fortify (buff)
+            // Sprinkle in ability 1 to exercise buffs/heals:
+            //   Round 1: Storm uses Dodge (buff), Boulder uses Fortify (buff)
             //   Round 3: if Ember is up, use Flame Shield (buff)
             //   Otherwise: ability 0 (damage)
-            let ability_a = if rounds == 1 && active_a.id == 8 {
-                1 // Phoenix: Rebirth (heal)
+            let ability_a = if rounds == 1 && active_a.id == 7 {
+                1 // Storm: Dodge (buff)
             } else if rounds == 3 && active_a.id == 2 {
                 1 // Ember: Flame Shield (buff)
             } else {
@@ -802,10 +662,13 @@ mod tests {
         }
 
         // Verify total_damage_dealt is sensible across all champions
-        let total_dmg: u32 = team_a.iter().chain(team_b.iter())
-            .map(|s| s.total_damage_dealt)
-            .sum();
-        assert!(total_dmg > 0, "no damage was dealt in the entire battle");
+        #[cfg(feature = "track-damage")]
+        {
+            let total_dmg: u32 = team_a.iter().chain(team_b.iter())
+                .map(|s| s.total_damage_dealt)
+                .sum();
+            assert!(total_dmg > 0, "no damage was dealt in the entire battle");
+        }
 
         // Print summary (visible with `cargo test -- --nocapture`)
         #[cfg(test)]
@@ -818,9 +681,8 @@ mod tests {
             for (label, team) in [("A", &team_a), ("B", &team_b)] {
                 for s in team.iter() {
                     std::println!(
-                        "  Team {} champion {}: HP {}/{} KO={} dmg_dealt={} burn_turns={}",
+                        "  Team {} champion {}: HP {}/{} KO={}",
                         label, s.id, s.current_hp, s.max_hp, s.is_ko,
-                        s.total_damage_dealt, s.burn_turns
                     );
                 }
             }
@@ -874,44 +736,25 @@ mod tests {
         assert!(rounds > 1, "battle should take more than 1 round");
     }
 
-    // Inferno's Scorch applies burn — verify burn ticks accumulate
-    // across multiple rounds and eventually KO the target.
+    // Inferno's Scorch is now plain damage (burn removed) — verify it
+    // deals damage without any burn mechanics.
     #[test]
-    fn multi_round_burn_kills() {
-        // Inferno (Fire, SPD 16) uses Scorch (ability 1: 15 power + 3-turn burn)
-        // vs Boulder (Earth, SPD 5) who uses Fortify (buff) every round.
-        // Fire > Earth = 1.5x on the initial hit. Burn does 140/10 = 14 per tick.
-        let mut inferno = init_champion_state(0);
-        let mut boulder = init_champion_state(1); // HP 140
+    fn inferno_scorch_deals_plain_damage() {
+        let inferno = init_champion_state(0);
+        let boulder = init_champion_state(1);
 
-        let mut rounds = 0u32;
-        let mut burn_tick_total = 0u32;
+        let result = resolve_turn(
+            &inferno,
+            &boulder,
+            &TurnAction { champion_id: 0, ability_index: 1 }, // Scorch (now plain damage 20)
+            &TurnAction { champion_id: 1, ability_index: 0 }, // Rock Slam
+        );
 
-        while !boulder.is_ko && rounds < 30 {
-            rounds += 1;
+        // Should have attack events, no burn events
+        let attack_events = count_events(&result, |e| matches!(e, TurnEvent::Attack { .. }));
+        assert!(attack_events >= 1);
 
-            // Inferno always uses Scorch (re-applies burn), Boulder always Fortifies
-            let result = resolve_turn(
-                &inferno,
-                &boulder,
-                &TurnAction { champion_id: 0, ability_index: 1 }, // Scorch
-                &TurnAction { champion_id: 1, ability_index: 1 }, // Fortify
-            );
-
-            // Count burn tick events this round
-            for i in 0..result.event_count as usize {
-                if let TurnEvent::BurnTick { damage, .. } = result.events[i] {
-                    burn_tick_total += damage;
-                }
-            }
-
-            inferno = result.state_a;
-            boulder = result.state_b;
-        }
-
-        assert!(boulder.is_ko, "Boulder should be KO'd by burn + damage");
-        assert!(burn_tick_total > 0, "burn should have dealt tick damage");
-        assert!(rounds > 1, "should take multiple rounds");
+        // Boulder should have taken damage
+        assert!(result.state_b.current_hp < 140);
     }
-
 }

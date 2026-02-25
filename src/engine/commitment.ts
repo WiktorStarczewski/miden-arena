@@ -16,8 +16,8 @@ import type { CommitData, RevealData } from "../types";
  * that matches what the arena contract will verify.
  */
 export function createCommitment(move: number): CommitData {
-  if (move < 1 || move > 20) {
-    throw new Error(`Move must be 1-20, got ${move}`);
+  if (move < 1 || move > 16) {
+    throw new Error(`Move must be 1-16, got ${move}`);
   }
 
   const noncePart1 = randomFelt();

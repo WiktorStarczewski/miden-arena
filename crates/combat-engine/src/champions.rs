@@ -1,300 +1,130 @@
-use crate::types::{Ability, AbilityType, Champion, Element, StatType};
+use crate::types::Element;
 
-pub const CHAMPIONS: [Champion; 10] = [
-    // 0: Inferno — Fire, HP 80, ATK 20, DEF 5, SPD 16
-    Champion {
-        id: 0,
-        hp: 80,
-        attack: 20,
-        defense: 5,
-        speed: 16,
-        element: Element::Fire,
-        abilities: [
-            Ability {
-                power: 35,
-                ability_type: AbilityType::Damage,
-                stat: StatType::Defense,
-                stat_value: 0,
-                duration: 0,
-                heal_amount: 0,
-                applies_burn: false,
-            },
-            Ability {
-                power: 15,
-                ability_type: AbilityType::DamageDot,
-                stat: StatType::Defense,
-                stat_value: 0,
-                duration: 3,
-                heal_amount: 0,
-                applies_burn: true,
-            },
-        ],
-    },
-    // 1: Boulder — Earth, HP 140, ATK 14, DEF 16, SPD 5
-    Champion {
-        id: 1,
-        hp: 140,
-        attack: 14,
-        defense: 16,
-        speed: 5,
-        element: Element::Earth,
-        abilities: [
-            Ability {
-                power: 28,
-                ability_type: AbilityType::Damage,
-                stat: StatType::Defense,
-                stat_value: 0,
-                duration: 0,
-                heal_amount: 0,
-                applies_burn: false,
-            },
-            Ability {
-                power: 0,
-                ability_type: AbilityType::Buff,
-                stat: StatType::Defense,
-                stat_value: 6,
-                duration: 2,
-                heal_amount: 0,
-                applies_burn: false,
-            },
-        ],
-    },
-    // 2: Ember — Fire, HP 90, ATK 16, DEF 8, SPD 14
-    Champion {
-        id: 2,
-        hp: 90,
-        attack: 16,
-        defense: 8,
-        speed: 14,
-        element: Element::Fire,
-        abilities: [
-            Ability {
-                power: 25,
-                ability_type: AbilityType::Damage,
-                stat: StatType::Defense,
-                stat_value: 0,
-                duration: 0,
-                heal_amount: 0,
-                applies_burn: false,
-            },
-            Ability {
-                power: 0,
-                ability_type: AbilityType::Buff,
-                stat: StatType::Defense,
-                stat_value: 5,
-                duration: 2,
-                heal_amount: 0,
-                applies_burn: false,
-            },
-        ],
-    },
-    // 3: Torrent — Water, HP 110, ATK 12, DEF 12, SPD 10
-    Champion {
-        id: 3,
-        hp: 110,
-        attack: 12,
-        defense: 12,
-        speed: 10,
-        element: Element::Water,
-        abilities: [
-            Ability {
-                power: 22,
-                ability_type: AbilityType::Damage,
-                stat: StatType::Defense,
-                stat_value: 0,
-                duration: 0,
-                heal_amount: 0,
-                applies_burn: false,
-            },
-            Ability {
-                power: 0,
-                ability_type: AbilityType::Heal,
-                stat: StatType::Defense,
-                stat_value: 0,
-                duration: 0,
-                heal_amount: 25,
-                applies_burn: false,
-            },
-        ],
-    },
-    // 4: Gale — Wind, HP 75, ATK 15, DEF 6, SPD 18
-    Champion {
-        id: 4,
-        hp: 75,
-        attack: 15,
-        defense: 6,
-        speed: 18,
-        element: Element::Wind,
-        abilities: [
-            Ability {
-                power: 24,
-                ability_type: AbilityType::Damage,
-                stat: StatType::Defense,
-                stat_value: 0,
-                duration: 0,
-                heal_amount: 0,
-                applies_burn: false,
-            },
-            Ability {
-                power: 0,
-                ability_type: AbilityType::Buff,
-                stat: StatType::Speed,
-                stat_value: 5,
-                duration: 2,
-                heal_amount: 0,
-                applies_burn: false,
-            },
-        ],
-    },
-    // 5: Tide — Water, HP 100, ATK 11, DEF 14, SPD 9
-    Champion {
-        id: 5,
-        hp: 100,
-        attack: 11,
-        defense: 14,
-        speed: 9,
-        element: Element::Water,
-        abilities: [
-            Ability {
-                power: 20,
-                ability_type: AbilityType::Damage,
-                stat: StatType::Defense,
-                stat_value: 0,
-                duration: 0,
-                heal_amount: 0,
-                applies_burn: false,
-            },
-            Ability {
-                power: 0,
-                ability_type: AbilityType::Debuff,
-                stat: StatType::Attack,
-                stat_value: 4,
-                duration: 2,
-                heal_amount: 0,
-                applies_burn: false,
-            },
-        ],
-    },
-    // 6: Quake — Earth, HP 130, ATK 13, DEF 15, SPD 7
-    Champion {
-        id: 6,
-        hp: 130,
-        attack: 13,
-        defense: 15,
-        speed: 7,
-        element: Element::Earth,
-        abilities: [
-            Ability {
-                power: 26,
-                ability_type: AbilityType::Damage,
-                stat: StatType::Defense,
-                stat_value: 0,
-                duration: 0,
-                heal_amount: 0,
-                applies_burn: false,
-            },
-            Ability {
-                power: 0,
-                ability_type: AbilityType::Buff,
-                stat: StatType::Defense,
-                stat_value: 8,
-                duration: 1,
-                heal_amount: 0,
-                applies_burn: false,
-            },
-        ],
-    },
-    // 7: Storm — Wind, HP 85, ATK 17, DEF 7, SPD 15
-    Champion {
-        id: 7,
-        hp: 85,
-        attack: 17,
-        defense: 7,
-        speed: 15,
-        element: Element::Wind,
-        abilities: [
-            Ability {
-                power: 30,
-                ability_type: AbilityType::Damage,
-                stat: StatType::Defense,
-                stat_value: 0,
-                duration: 0,
-                heal_amount: 0,
-                applies_burn: false,
-            },
-            Ability {
-                power: 0,
-                ability_type: AbilityType::Buff,
-                stat: StatType::Speed,
-                stat_value: 6,
-                duration: 2,
-                heal_amount: 0,
-                applies_burn: false,
-            },
-        ],
-    },
-    // 8: Phoenix — Fire, HP 65, ATK 22, DEF 4, SPD 17
-    Champion {
-        id: 8,
-        hp: 65,
-        attack: 22,
-        defense: 4,
-        speed: 17,
-        element: Element::Fire,
-        abilities: [
-            Ability {
-                power: 38,
-                ability_type: AbilityType::Damage,
-                stat: StatType::Defense,
-                stat_value: 0,
-                duration: 0,
-                heal_amount: 0,
-                applies_burn: false,
-            },
-            Ability {
-                power: 0,
-                ability_type: AbilityType::Heal,
-                stat: StatType::Defense,
-                stat_value: 0,
-                duration: 0,
-                heal_amount: 30,
-                applies_burn: false,
-            },
-        ],
-    },
-    // 9: Kraken — Water, HP 120, ATK 10, DEF 16, SPD 6
-    Champion {
-        id: 9,
-        hp: 120,
-        attack: 10,
-        defense: 16,
-        speed: 6,
-        element: Element::Water,
-        abilities: [
-            Ability {
-                power: 24,
-                ability_type: AbilityType::Damage,
-                stat: StatType::Defense,
-                stat_value: 0,
-                duration: 0,
-                heal_amount: 0,
-                applies_burn: false,
-            },
-            Ability {
-                power: 0,
-                ability_type: AbilityType::Buff,
-                stat: StatType::Defense,
-                stat_value: 7,
-                duration: 2,
-                heal_amount: 0,
-                applies_burn: false,
-            },
-        ],
-    },
+// ---------------------------------------------------------------------------
+// Struct-of-Arrays champion data — parallel const arrays for minimal WASM size.
+// Index = champion ID (0-7).
+// ---------------------------------------------------------------------------
+
+pub const HP:      [u32; 8] = [80, 140, 90, 110, 75, 100, 130, 85];
+pub const ATTACK:  [u32; 8] = [20, 14, 16, 12, 15, 11, 13, 17];
+pub const DEFENSE: [u32; 8] = [5, 16, 8, 12, 6, 14, 15, 7];
+pub const SPEED:   [u32; 8] = [16, 5, 14, 10, 18, 9, 7, 15];
+pub const ELEMENT: [Element; 8] = [
+    Element::Fire, Element::Earth, Element::Fire, Element::Water,
+    Element::Wind, Element::Water, Element::Earth, Element::Wind,
 ];
 
+// ---------------------------------------------------------------------------
+// Ability data — 16 entries = 8 champs × 2 abilities.
+// Index = champion_id * 2 + ability_index.
+//
+// Order: Inferno ab0, Inferno ab1, Boulder ab0, Boulder ab1, Ember ab0,
+//        Ember ab1, Torrent ab0, Torrent ab1, Gale ab0, Gale ab1,
+//        Tide ab0, Tide ab1, Quake ab0, Quake ab1, Storm ab0, Storm ab1
+//
+// AB_TYPE: 0=Damage, 1=Heal, 2=StatMod
+// AB_STAT: 0=Defense, 1=Speed, 2=Attack
+// ---------------------------------------------------------------------------
+
+pub const AB_POWER:     [u32; 16] = [35, 20, 28,  0, 25,  0, 22,  0, 24,  0, 20,  0, 26,  0, 30,  0];
+pub const AB_TYPE:      [u8; 16]  = [ 0,  0,  0,  2,  0,  2,  0,  1,  0,  2,  0,  2,  0,  2,  0,  2];
+pub const AB_STAT:      [u8; 16]  = [ 0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  0,  2,  0,  0,  0,  1];
+pub const AB_STAT_VAL:  [u32; 16] = [ 0,  0,  0,  6,  0,  5,  0,  0,  0,  5,  0,  4,  0,  8,  0,  6];
+pub const AB_DURATION:  [u32; 16] = [ 0,  0,  0,  2,  0,  2,  0,  0,  0,  2,  0,  2,  0,  1,  0,  2];
+pub const AB_HEAL:      [u32; 16] = [ 0,  0,  0,  0,  0,  0,  0, 25,  0,  0,  0,  0,  0,  0,  0,  0];
+pub const AB_IS_DEBUFF: [bool; 16] = [
+    false, false, false, false, false, false, false, false,
+    false, false, false, true,  false, false, false, false,
+];
+
+// ---------------------------------------------------------------------------
+// Legacy AoS interface — feature-gated for test/library builds only.
+// The on-chain build (combat-account) uses SoA arrays directly.
+// ---------------------------------------------------------------------------
+
+use crate::types::{Ability, AbilityType, Champion, StatType};
+
+/// Build a Champion struct from the SoA arrays. Used by tests and event-based
+/// combat resolution (frontend parity).
 pub fn get_champion(id: u8) -> &'static Champion {
     &CHAMPIONS[id as usize]
+}
+
+/// Lazily-constructed AoS view for test/library compatibility.
+/// This is a compile-time constant so it costs nothing at runtime.
+pub const CHAMPIONS: [Champion; 8] = build_champions();
+
+const fn build_champions() -> [Champion; 8] {
+    let mut champs = [Champion {
+        id: 0,
+        hp: 0,
+        attack: 0,
+        defense: 0,
+        speed: 0,
+        element: Element::Fire,
+        abilities: [Ability {
+            power: 0,
+            ability_type: AbilityType::Damage,
+            stat: StatType::Defense,
+            stat_value: 0,
+            duration: 0,
+            heal_amount: 0,
+            is_debuff: false,
+        }; 2],
+    }; 8];
+
+    let mut i = 0;
+    while i < 8 {
+        champs[i].id = i as u8;
+        champs[i].hp = HP[i];
+        champs[i].attack = ATTACK[i];
+        champs[i].defense = DEFENSE[i];
+        champs[i].speed = SPEED[i];
+        champs[i].element = ELEMENT[i];
+
+        let ab0 = i * 2;
+        let ab1 = i * 2 + 1;
+
+        champs[i].abilities[0] = Ability {
+            power: AB_POWER[ab0],
+            ability_type: ab_type_from_u8(AB_TYPE[ab0]),
+            stat: stat_from_u8(AB_STAT[ab0]),
+            stat_value: AB_STAT_VAL[ab0],
+            duration: AB_DURATION[ab0],
+            heal_amount: AB_HEAL[ab0],
+            is_debuff: AB_IS_DEBUFF[ab0],
+        };
+        champs[i].abilities[1] = Ability {
+            power: AB_POWER[ab1],
+            ability_type: ab_type_from_u8(AB_TYPE[ab1]),
+            stat: stat_from_u8(AB_STAT[ab1]),
+            stat_value: AB_STAT_VAL[ab1],
+            duration: AB_DURATION[ab1],
+            heal_amount: AB_HEAL[ab1],
+            is_debuff: AB_IS_DEBUFF[ab1],
+        };
+
+        i += 1;
+    }
+    champs
+}
+
+const fn ab_type_from_u8(v: u8) -> AbilityType {
+    match v {
+        0 => AbilityType::Damage,
+        1 => AbilityType::Heal,
+        2 => AbilityType::StatMod,
+        _ => AbilityType::Damage, // unreachable in practice
+    }
+}
+
+const fn stat_from_u8(v: u8) -> StatType {
+    match v {
+        0 => StatType::Defense,
+        1 => StatType::Speed,
+        2 => StatType::Attack,
+        _ => StatType::Defense, // unreachable in practice
+    }
 }
 
 #[cfg(test)]
@@ -303,8 +133,8 @@ mod tests {
     use crate::types::Element;
 
     #[test]
-    fn all_10_champions_load() {
-        for i in 0..10u8 {
+    fn all_8_champions_load() {
+        for i in 0..8u8 {
             let c = get_champion(i);
             assert_eq!(c.id, i);
             assert!(c.hp > 0);
@@ -322,8 +152,38 @@ mod tests {
     }
 
     #[test]
+    fn inferno_scorch_is_plain_damage() {
+        let c = get_champion(0);
+        let scorch = &c.abilities[1];
+        assert_eq!(scorch.ability_type, AbilityType::Damage);
+        assert_eq!(scorch.power, 20);
+    }
+
+    #[test]
+    fn soa_matches_aos() {
+        for i in 0..8usize {
+            let c = &CHAMPIONS[i];
+            assert_eq!(c.hp, HP[i]);
+            assert_eq!(c.attack, ATTACK[i]);
+            assert_eq!(c.defense, DEFENSE[i]);
+            assert_eq!(c.speed, SPEED[i]);
+            assert_eq!(c.element, ELEMENT[i]);
+
+            for ab in 0..2usize {
+                let idx = i * 2 + ab;
+                let ability = &c.abilities[ab];
+                assert_eq!(ability.power, AB_POWER[idx]);
+                assert_eq!(ability.stat_value, AB_STAT_VAL[idx]);
+                assert_eq!(ability.duration, AB_DURATION[idx]);
+                assert_eq!(ability.heal_amount, AB_HEAL[idx]);
+                assert_eq!(ability.is_debuff, AB_IS_DEBUFF[idx]);
+            }
+        }
+    }
+
+    #[test]
     #[should_panic]
     fn panics_on_invalid_id() {
-        get_champion(10);
+        get_champion(8);
     }
 }

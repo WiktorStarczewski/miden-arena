@@ -1,8 +1,8 @@
 //! Process Team Note Script (Cross-Context)
 //!
-//! This note delivers a player's team selection to the arena account.
-//! Word arg = [c0, c1, c2, 0] where c0..c2 are champion IDs (0-9).
-//! Uses cross-context calling to invoke arena account procedures directly.
+//! This note delivers a player's team selection to the matchmaking account.
+//! Word arg = [c0, c1, c2, 0] where c0..c2 are champion IDs (0-7).
+//! Uses cross-context calling to invoke matchmaking account procedures directly.
 
 #![no_std]
 #![feature(alloc_error_handler)]
@@ -31,7 +31,7 @@ bindings::export!(ProcessTeamNote);
 
 use bindings::{
     exports::miden::base::note_script::Guest,
-    miden::arena_account::arena_account::set_team,
+    miden::matchmaking_account::matchmaking_account::set_team,
 };
 
 struct ProcessTeamNote;

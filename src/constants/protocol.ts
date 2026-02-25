@@ -7,13 +7,13 @@ export const ACCEPT_SIGNAL = 101n;
 /** Amount sent to opponent when leaving / rehosting */
 export const LEAVE_SIGNAL = 102n;
 
-/** Draft pick amounts: championId + 1 (1-10) */
+/** Draft pick amounts: championId + 1 (1-8) */
 export const DRAFT_PICK_MIN = 1n;
-export const DRAFT_PICK_MAX = 10n;
+export const DRAFT_PICK_MAX = 8n;
 
-/** Combat move amounts: championId * 2 + abilityIndex + 1 (1-20) */
+/** Combat move amounts: championId * 2 + abilityIndex + 1 (1-16) */
 export const MOVE_MIN = 1n;
-export const MOVE_MAX = 20n;
+export const MOVE_MAX = 16n;
 
 /** Snake draft order: index = pick number (0-5), value = "A" or "B" */
 export const DRAFT_ORDER: ("A" | "B")[] = ["A", "B", "B", "A", "A", "B"];
@@ -22,4 +22,4 @@ export const DRAFT_ORDER: ("A" | "B")[] = ["A", "B", "B", "A", "A", "B"];
 export const TEAM_SIZE = 3;
 
 /** Total champion pool size */
-export const POOL_SIZE = 10;
+export const POOL_SIZE = 8;

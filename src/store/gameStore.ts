@@ -1,5 +1,7 @@
 import { create } from "zustand";
 import type { ChampionState, CommitData, RevealData, TurnRecord } from "../types";
+import { CHAMPIONS } from "../constants/champions";
+import { POOL_SIZE } from "../constants/protocol";
 
 export type Screen = "loading" | "title" | "setup" | "lobby" | "draft" | "arenaSetup" | "preBattleLoading" | "battle" | "gameOver";
 export type SetupStep = "idle" | "connecting" | "creatingWallet" | "funding" | "consuming" | "done";
@@ -197,7 +199,7 @@ export const useGameStore = create<GameStore>((set) => ({
   initDraft: (staleNoteIds) =>
     set({
       draft: {
-        pool: Array.from({ length: 10 }, (_, i) => i),
+        pool: Array.from({ length: POOL_SIZE }, (_, i) => i),
         myTeam: [],
         opponentTeam: [],
         currentPicker: "me",
@@ -241,7 +243,6 @@ export const useGameStore = create<GameStore>((set) => ({
           currentHp: getChampionHp(id),
           maxHp: getChampionHp(id),
           buffs: [],
-          burnTurns: 0,
           isKO: false,
           totalDamageDealt: 0,
         })),
@@ -250,7 +251,6 @@ export const useGameStore = create<GameStore>((set) => ({
           currentHp: getChampionHp(id),
           maxHp: getChampionHp(id),
           buffs: [],
-          burnTurns: 0,
           isKO: false,
           totalDamageDealt: 0,
         })),
@@ -321,6 +321,6 @@ export const useGameStore = create<GameStore>((set) => ({
 
 // Helper: get champion HP from the roster
 function getChampionHp(id: number): number {
-  const hpTable = [90, 110, 140, 75, 80, 100, 130, 85, 65, 120];
-  return hpTable[id] ?? 100;
+  const champ = CHAMPIONS[id];
+  return champ ? champ.hp : 100;
 }

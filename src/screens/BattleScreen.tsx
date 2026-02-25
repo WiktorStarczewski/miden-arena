@@ -99,11 +99,9 @@ function toAnimAction(
   abilityType: string,
   side: "left" | "right",
   element: string,
+  abilityIsDebuff?: boolean,
 ): AnimAction {
-  const isDirected =
-    abilityType === "damage" ||
-    abilityType === "damage_dot" ||
-    abilityType === "debuff";
+  const isDirected = abilityType === "damage" || (abilityType === "stat_mod" && abilityIsDebuff);
   return {
     type: isDirected ? "attack" : "self",
     actorSide: side,
@@ -184,11 +182,11 @@ function buildAnimScript(
     myChampionId: record.myAction.championId,
     oppChampionId: record.opponentAction.championId,
     first: {
-      ...toAnimAction(firstAbility.type, firstSide, firstChamp.element),
+      ...toAnimAction(firstAbility.type, firstSide, firstChamp.element, firstAbility.isDebuff),
       indicator: extractIndicator(record.events, firstChamp.id, secondChamp.id, firstSide),
     },
     second: {
-      ...toAnimAction(secondAbility.type, secondSide, secondChamp.element),
+      ...toAnimAction(secondAbility.type, secondSide, secondChamp.element, secondAbility.isDebuff),
       indicator: secondActed
         ? extractIndicator(record.events, secondChamp.id, firstChamp.id, secondSide)
         : undefined,

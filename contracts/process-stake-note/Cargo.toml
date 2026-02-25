@@ -16,7 +16,7 @@ package = "miden:process-stake-note"
 project-kind = "note-script"
 
 [package.metadata.miden.dependencies]
-"miden:arena-account" = { path = "../arena-account" }
+"miden:matchmaking-account" = { path = "../matchmaking-account" }
 
 [package.metadata.component.target.dependencies]
-"miden:arena-account" = { path = "../arena-account/wit/miden-arena-account.wit" }
+"miden:matchmaking-account" = { path = "../matchmaking-account/wit/miden-matchmaking-account.wit" }

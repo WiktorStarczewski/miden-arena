@@ -1,11 +1,17 @@
 /**
  * arenaNote.ts — Note script loader, builders, and two-tx orchestrator for
- * arena contract interactions.
+ * matchmaking + combat account interactions.
  *
- * Each arena interaction follows a two-transaction pattern:
- *  1. Session wallet creates an output note with a custom script targeting the arena
- *  2. The note is consumed against the arena account, triggering the script which
- *     calls arena procedures (join, set_team, submit_commit, submit_reveal)
+ * Each interaction follows a two-transaction pattern:
+ *  1. Session wallet creates an output note with a custom script targeting the account
+ *  2. The note is consumed against the target account, triggering the script which
+ *     calls account procedures
+ *
+ * After the split:
+ *  - Stake/team notes → matchmaking account
+ *  - Commit/reveal notes → combat account
+ *  - Init combat note → combat account (new)
+ *  - Result note → matchmaking account (created by combat, consumed by matchmaking)
  *
  * This module encapsulates the full flow in `submitArenaNote()`.
  */
@@ -19,19 +25,19 @@ import {
   NoteAndArgs,
   NoteAndArgsArray,
   NoteAssets,
+  NoteInputs,
   NoteMetadata,
   NoteRecipient,
   NoteScript,
-  NoteStorage,
   NoteTag,
   NoteType,
   OutputNote,
   OutputNoteArray,
   Package,
   TransactionRequestBuilder,
+  WebClient,
   Word,
 } from "@miden-sdk/miden-sdk";
-import type { WasmWebClient } from "@miden-sdk/miden-sdk";
 import { NOTE_SCRIPTS } from "../constants/contracts";
 import { MIDEN_FAUCET_ID, STAKE_AMOUNT, PROTOCOL_NOTE_AMOUNT } from "../constants/miden";
 
@@ -40,10 +46,10 @@ import { MIDEN_FAUCET_ID, STAKE_AMOUNT, PROTOCOL_NOTE_AMOUNT } from "../constant
 // ---------------------------------------------------------------------------
 
 /** Prover interface matching what useMiden() exposes. */
-type Prover = Parameters<WasmWebClient["submitNewTransactionWithProver"]>[2];
+type Prover = Parameters<WebClient["submitNewTransactionWithProver"]>[2];
 
 export interface SubmitArenaNoteParams {
-  client: WasmWebClient;
+  client: WebClient;
   prover: Prover;
   sessionWalletId: string;
   arenaAccountId: string;
@@ -113,96 +119,141 @@ export async function loadNoteScript(path: string): Promise<NoteScript> {
 }
 
 // ---------------------------------------------------------------------------
-// Note builders
+// Note builders — Matchmaking account
 // ---------------------------------------------------------------------------
 
 /**
- * Build a stake note targeting the arena account.
+ * Build a stake note targeting the matchmaking account.
  * Assets: FungibleAsset(faucetId, STAKE_AMOUNT)
  * No noteInputs — script uses get_assets() + get_sender().
  */
 export async function buildStakeNote(
   senderAccountId: string,
-  arenaAccountId: string,
+  matchmakingAccountId: string,
 ): Promise<Note> {
   const script = await loadNoteScript(NOTE_SCRIPTS.processStake);
   const sender = parseId(senderAccountId);
-  const arena = parseId(arenaAccountId);
+  const matchmaking = parseId(matchmakingAccountId);
   const faucet = parseId(MIDEN_FAUCET_ID);
 
   const assets = new NoteAssets([new FungibleAsset(faucet, STAKE_AMOUNT)]);
-  const tag = NoteTag.withAccountTarget(arena);
+  const tag = NoteTag.withAccountTarget(matchmaking);
   const metadata = new NoteMetadata(sender, NoteType.Public, tag);
-  const storage = new NoteStorage(new FeltArray([]));
+  const storage = new NoteInputs(new FeltArray([]));
   const recipient = new NoteRecipient(randomSerialNum(), script, storage);
 
   return new Note(assets, metadata, recipient);
 }
 
 /**
- * Build a team submission note targeting the arena account.
+ * Build a team submission note targeting the matchmaking account.
  * Assets: dust (PROTOCOL_NOTE_AMOUNT).
  * No noteInputs — script uses arg Word at consumption time.
  */
 export async function buildTeamNote(
   senderAccountId: string,
-  arenaAccountId: string,
+  matchmakingAccountId: string,
 ): Promise<Note> {
   const script = await loadNoteScript(NOTE_SCRIPTS.processTeam);
   const sender = parseId(senderAccountId);
-  const arena = parseId(arenaAccountId);
+  const matchmaking = parseId(matchmakingAccountId);
   const faucet = parseId(MIDEN_FAUCET_ID);
 
   const assets = new NoteAssets([new FungibleAsset(faucet, PROTOCOL_NOTE_AMOUNT)]);
-  const tag = NoteTag.withAccountTarget(arena);
+  const tag = NoteTag.withAccountTarget(matchmaking);
   const metadata = new NoteMetadata(sender, NoteType.Public, tag);
-  const storage = new NoteStorage(new FeltArray([]));
+  const storage = new NoteInputs(new FeltArray([]));
   const recipient = new NoteRecipient(randomSerialNum(), script, storage);
 
   return new Note(assets, metadata, recipient);
 }
 
+// ---------------------------------------------------------------------------
+// Note builders — Combat account
+// ---------------------------------------------------------------------------
+
 /**
- * Build a commit note targeting the arena account.
+ * Build a commit note targeting the combat account.
  * Assets: dust (PROTOCOL_NOTE_AMOUNT).
  * noteInputs: [Felt(0n)] — phase=0 for commit.
  */
 export async function buildCommitNote(
   senderAccountId: string,
-  arenaAccountId: string,
+  combatAccountId: string,
 ): Promise<Note> {
   const script = await loadNoteScript(NOTE_SCRIPTS.submitMove);
   const sender = parseId(senderAccountId);
-  const arena = parseId(arenaAccountId);
+  const combat = parseId(combatAccountId);
   const faucet = parseId(MIDEN_FAUCET_ID);
 
   const assets = new NoteAssets([new FungibleAsset(faucet, PROTOCOL_NOTE_AMOUNT)]);
-  const tag = NoteTag.withAccountTarget(arena);
+  const tag = NoteTag.withAccountTarget(combat);
   const metadata = new NoteMetadata(sender, NoteType.Public, tag);
-  const storage = new NoteStorage(new FeltArray([new Felt(0n)]));
+  const storage = new NoteInputs(new FeltArray([new Felt(0n)]));
   const recipient = new NoteRecipient(randomSerialNum(), script, storage);
 
   return new Note(assets, metadata, recipient);
 }
 
 /**
- * Build a reveal note targeting the arena account.
+ * Build a reveal note targeting the combat account.
  * Assets: dust (PROTOCOL_NOTE_AMOUNT).
  * noteInputs: [Felt(1n)] — phase=1 for reveal.
  */
 export async function buildRevealNote(
   senderAccountId: string,
-  arenaAccountId: string,
+  combatAccountId: string,
 ): Promise<Note> {
   const script = await loadNoteScript(NOTE_SCRIPTS.submitMove);
   const sender = parseId(senderAccountId);
-  const arena = parseId(arenaAccountId);
+  const combat = parseId(combatAccountId);
   const faucet = parseId(MIDEN_FAUCET_ID);
 
   const assets = new NoteAssets([new FungibleAsset(faucet, PROTOCOL_NOTE_AMOUNT)]);
-  const tag = NoteTag.withAccountTarget(arena);
+  const tag = NoteTag.withAccountTarget(combat);
   const metadata = new NoteMetadata(sender, NoteType.Public, tag);
-  const storage = new NoteStorage(new FeltArray([new Felt(1n)]));
+  const storage = new NoteInputs(new FeltArray([new Felt(1n)]));
+  const recipient = new NoteRecipient(randomSerialNum(), script, storage);
+
+  return new Note(assets, metadata, recipient);
+}
+
+/**
+ * Build an init-combat note targeting the combat account.
+ * Assets: dust (PROTOCOL_NOTE_AMOUNT).
+ * noteInputs: [pa_prefix, pa_suffix, pb_prefix, pb_suffix,
+ *              team_a_c0, team_a_c1, team_a_c2,
+ *              team_b_c0, team_b_c1, team_b_c2]
+ */
+export async function buildInitCombatNote(
+  senderAccountId: string,
+  combatAccountId: string,
+  playerA: { prefix: bigint; suffix: bigint },
+  playerB: { prefix: bigint; suffix: bigint },
+  teamA: [number, number, number],
+  teamB: [number, number, number],
+): Promise<Note> {
+  const script = await loadNoteScript(NOTE_SCRIPTS.initCombat);
+  const sender = parseId(senderAccountId);
+  const combat = parseId(combatAccountId);
+  const faucet = parseId(MIDEN_FAUCET_ID);
+
+  const assets = new NoteAssets([new FungibleAsset(faucet, PROTOCOL_NOTE_AMOUNT)]);
+  const tag = NoteTag.withAccountTarget(combat);
+  const metadata = new NoteMetadata(sender, NoteType.Public, tag);
+  const inputs = new FeltArray([
+    new Felt(playerA.prefix),
+    new Felt(playerA.suffix),
+    new Felt(playerB.prefix),
+    new Felt(playerB.suffix),
+    new Felt(BigInt(teamA[0])),
+    new Felt(BigInt(teamA[1])),
+    new Felt(BigInt(teamA[2])),
+    new Felt(BigInt(teamB[0])),
+    new Felt(BigInt(teamB[1])),
+    new Felt(BigInt(teamB[2])),
+  ]);
+  const storage = new NoteInputs(inputs);
   const recipient = new NoteRecipient(randomSerialNum(), script, storage);
 
   return new Note(assets, metadata, recipient);
@@ -218,7 +269,7 @@ const RETRY_DELAY_MS = 2000;
 /**
  * Submit an arena note via two sequential transactions:
  *  1. Create the note from the session wallet (output note on-chain)
- *  2. Consume the note against the arena account (triggers the note script)
+ *  2. Consume the note against the target account (triggers the note script)
  *
  * Handles nonce conflicts via retry with backoff.
  * Returns the created note ID for tracking/retry.
@@ -249,12 +300,12 @@ export async function submitArenaNote(
   // --- Step 2: Sync so the note becomes discoverable ---
   await client.syncState();
 
-  // --- Step 3: Consume the note against the arena account ---
-  const arenaId = parseId(arenaAccountId);
+  // --- Step 3: Consume the note against the target account ---
+  const targetId = parseId(arenaAccountId);
 
-  // Import the arena account if not already imported (idempotent)
+  // Import the target account if not already imported (idempotent)
   try {
-    await client.importAccountById(arenaId);
+    await client.importAccountById(targetId);
   } catch {
     // Already imported — ignore
   }
@@ -277,17 +328,17 @@ export async function submitArenaNote(
         .withInputNotes(noteAndArgsArray)
         .build();
 
-      // Submit against the arena account
-      const freshArenaId = parseId(arenaAccountId);
+      // Submit against the target account
+      const freshTargetId = parseId(arenaAccountId);
       await client.submitNewTransactionWithProver(
-        freshArenaId,
+        freshTargetId,
         consumeTxRequest,
         prover,
       );
 
-      console.log("[submitArenaNote] Note consumed by arena", { noteId, attempt });
+      console.log("[submitArenaNote] Note consumed by target account", { noteId, attempt });
 
-      // Sync again to reflect updated arena state
+      // Sync again to reflect updated state
       await client.syncState();
 
       return { noteId };
